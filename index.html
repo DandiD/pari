@@ -296,10 +296,8 @@ img{max-width:100%}
 .joinrow .inp{flex:1;min-width:200px}
 @media (max-width:899px){ .toast{bottom:calc(84px + env(safe-area-inset-bottom, 0px))} }
 .foot-note{font-size:12.5px;color:var(--muted);text-align:center;padding-top:8px}
-.intro{max-width:1080px;margin:36px auto 0;padding-top:20px;border-top:1px solid var(--line);color:var(--muted);font-size:14px}
-.intro h2{color:var(--ink);font-size:16px;margin-bottom:6px}
-.intro p{margin:0 0 8px;max-width:640px}
-.intro ul{margin:0;padding-left:18px;max-width:640px}
+.about p{margin:0 0 10px}
+.about ul{margin:0;padding-left:20px;display:flex;flex-direction:column;gap:6px}
 .legal{max-width:1080px;font-size:12px;color:var(--muted);text-align:center;margin:20px auto 0}
 .legal a{color:inherit}
 </style>
@@ -311,7 +309,7 @@ img{max-width:100%}
   <div class="top"><div class="brand"><b>pari<i>.</i></b><span>conti divisi, senza limiti</span></div></div>
   <div class="skeleton"></div>
 </div>
-<section class="intro" id="intro" aria-labelledby="intro-h">
+<section class="intro" id="intro" hidden aria-labelledby="intro-h">
   <h2 id="intro-h">Cos'è Pari</h2>
   <p>Pari è un'app gratuita per dividere le spese con gli amici: un viaggio, la casa in condivisione, una cena. Crei un gruppo, aggiungi chi partecipa e mandi il link. Chi lo apre entra subito, senza account e senza scaricare niente.</p>
   <ul>
@@ -569,7 +567,6 @@ function handleWriteError(err, fallback){
 /* ---------- render ---------- */
 function render(){
   const app = $("#app");
-  $("#intro").hidden = !!S.gid;
   const top = `<div class="top"><div class="brand"><b>pari<i>.</i></b><span>conti divisi, senza limiti</span></div>${S.gid && group() ? `<button class="btn ghost small" data-act="home">← Tutti i gruppi</button>` : ""}</div>`;
   const banner = store.mode==="local" ? `<div class="banner">Anteprima: il database non è ancora collegato, quindi vedi un gruppo di esempio e le modifiche non vengono salvate. Inserisci la chiave di Supabase in config.js.</div>`
     : (!store.canWrite ? `<div class="banner">Puoi vedere i conti ma non aggiungere spese. Chiedi a chi ha creato il gruppo di aggiungerti alla pagina con la tua email, come Editor, poi ricarica.</div>` : "");
@@ -599,7 +596,7 @@ function renderHome(){
       <p>Crea un gruppo, aggiungi chi partecipa e registra le spese. Pari calcola chi deve cosa e il modo più corto per chiudere i conti. Ogni gruppo ha un link segreto: chi lo riceve entra senza account.</p>
       ${store.canWrite ? `<div class="row"><button class="btn primary" data-act="newGroup">Crea un gruppo</button><button class="btn" data-act="exampleGroup">Prova con un gruppo di esempio</button></div>` : ""}</div>${JOIN}`;
   }
-  return `<div class="row" style="justify-content:space-between"><h1>I tuoi gruppi</h1>${store.canWrite?`<button class="btn primary" data-act="newGroup">Nuovo gruppo</button>`:""}</div>
+  return `<div class="row" style="justify-content:space-between"><h1>I tuoi gruppi</h1><div class="row" style="gap:6px"><button class="btn ghost" data-act="about">Cos'è Pari</button>${store.canWrite?`<button class="btn primary" data-act="newGroup">Nuovo gruppo</button>`:""}</div></div>
   <div class="groups">${gs.map(g=>`<button class="gcard" data-act="open" data-id="${esc(g.id)}">
     <div class="row" style="justify-content:space-between;width:100%"><h3>${esc(g.name)}</h3>${g.example?`<span class="tag">Esempio</span>`:""}</div>
     <div class="avatars">${g.members.map(m=>avatar(g,m.id)).join("")}</div>
@@ -752,6 +749,17 @@ function openSheet(html, onMount){
   $("#sheetRoot [data-scrim]").addEventListener("mousedown", e=>{ if (e.target.hasAttribute("data-scrim")) closeSheet(); });
   document.addEventListener("keydown", escClose);
   onMount && onMount($("#sheetRoot .sheet"));
+}
+
+// Il testo sta nell'HTML statico (#intro), così lo leggono anche i crawler che non eseguono JavaScript.
+function aboutSheet(){
+  const body = [...$("#intro").children].slice(1).map(n=>n.outerHTML).join("");
+  openSheet(`<div class="sh"><h2>Cos'è Pari</h2><button class="btn ghost iconbtn" data-x aria-label="Chiudi">✕</button></div>
+    <div class="about">${body}</div>
+    ${store.canWrite ? `<div class="actions"><span></span><button class="btn primary" data-new>Crea un gruppo</button></div>` : ""}`, r=>{
+    r.querySelector("[data-x]").onclick = closeSheet;
+    const n = r.querySelector("[data-new]"); if (n) n.onclick = ()=>groupSheet(null);
+  });
 }
 
 function expenseSheet(g, existing, prefill){
@@ -951,6 +959,7 @@ document.addEventListener("click", async ev=>{
   else if (act==="retry" && S.gid) openGroup(S.gid);
   else if (act==="open") openGroup(t.dataset.id);
   else if (act==="newGroup") groupSheet(null);
+  else if (act==="about") aboutSheet();
   else if (act==="editGroup" && g) groupSheet(g);
   else if (act==="exampleGroup"){
     const {g:eg, exps} = exampleGroup(); t.disabled = true;
