@@ -1,0 +1,81 @@
+<!doctype html>
+<html lang="it">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1,viewport-fit=cover">
+<meta name="robots" content="noindex">
+<meta name="referrer" content="no-referrer">
+<title>Privacy · Pari</title>
+<link rel="icon" href="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 32 32'%3E%3Crect width='32' height='32' rx='8' fill='%232E39C9'/%3E%3Ctext x='16' y='23' font-family='Arial' font-weight='700' font-size='20' text-anchor='middle' fill='white'%3Ep%3C/text%3E%3C/svg%3E">
+<link rel="stylesheet" href="fonts/fonts.css">
+<style>
+:root{
+  --bg:#ECF0EE; --surface:#FAFCFB; --ink:#13201C; --muted:#5A6A65; --line:#D2DBD7; --accent:#2E39C9;
+  --f-display:"Familjen Grotesk", "Helvetica Neue", Arial, sans-serif;
+  --f-body:"Figtree", system-ui, -apple-system, "Segoe UI", sans-serif;
+}
+@media (prefers-color-scheme: dark){ :root:not([data-theme="light"]){
+  --bg:#0E1412; --surface:#161E1B; --ink:#E4EBE8; --muted:#90A09B; --line:#29342F; --accent:#8E97FF; color-scheme:dark;
+}}
+:root[data-theme="dark"]{
+  --bg:#0E1412; --surface:#161E1B; --ink:#E4EBE8; --muted:#90A09B; --line:#29342F; --accent:#8E97FF; color-scheme:dark;
+}
+*{box-sizing:border-box}
+html,body{background:var(--bg)}
+body{margin:0;color:var(--ink);font-family:var(--f-body);font-size:15px;line-height:1.6;
+  padding:20px max(16px, env(safe-area-inset-right, 0px)) 60px max(16px, env(safe-area-inset-left, 0px))}
+main{max-width:680px;margin:0 auto}
+a{color:var(--accent)}
+.brand{font-family:var(--f-display);font-size:22px;font-weight:700;letter-spacing:-.02em;color:var(--ink);text-decoration:none}
+.brand i{font-style:normal;color:var(--accent)}
+h1,h2{font-family:var(--f-display);letter-spacing:-.015em;text-wrap:balance}
+h1{font-size:clamp(26px,5vw,34px);line-height:1.1;margin:28px 0 6px}
+h2{font-size:18px;margin:28px 0 6px}
+p,ul{margin:0 0 10px}
+ul{padding-left:20px}
+.muted{color:var(--muted);font-size:13px}
+.card{background:var(--surface);border:1px solid var(--line);border-radius:14px;padding:14px 18px;margin:16px 0}
+</style>
+</head>
+<body>
+<main>
+<a class="brand" href="./">pari<i>.</i></a>
+
+<h1>Privacy</h1>
+<p class="muted">Aggiornata il 18 ottobre 2026</p>
+
+<div class="card">
+<p style="margin:0">In breve: Pari non ha account, non usa cookie e non traccia nessuno. Salva solo quello che scrivi in un gruppo (nomi e spese), in un database in Irlanda. Lo vede solo chi ha il link del gruppo, e quando elimini il gruppo sparisce tutto.</p>
+</div>
+
+<h2>Chi gestisce Pari</h2>
+<p>Pari è un progetto personale e gratuito di Daniele Merola, titolare del trattamento dei dati. Per qualsiasi richiesta scrivi a <a href="mailto:docdandi@gmail.com">docdandi@gmail.com</a>.</p>
+
+<h2>Quali dati vengono salvati</h2>
+<ul>
+  <li><b>Il gruppo</b>: il nome del gruppo e i nomi dei partecipanti, così come li scrivete. Bastano nomi o soprannomi.</li>
+  <li><b>Le spese</b>: descrizione, importo, data, chi ha pagato e come è divisa.</li>
+</ul>
+<p>Non vengono chiesti email, numero di telefono né altri dati. Se crei un gruppo e inserisci i nomi di altre persone, avvisale e usa solo quello che serve a riconoscersi.</p>
+
+<h2>Dove sono i dati e chi li vede</h2>
+<ul>
+  <li>I dati dei gruppi sono nel database di <b>Supabase</b>, su server in Irlanda (Unione Europea). Supabase agisce come fornitore per conto di Pari.</li>
+  <li>Ogni gruppo ha un link segreto. <b>Chi ha il link può leggere e modificare il gruppo</b>; chi non ce l'ha non vede niente. Mandalo solo a chi ne fa parte.</li>
+  <li>La pagina è ospitata su <b>GitHub Pages</b> (GitHub, Inc., USA). Come ogni sito, GitHub e Supabase registrano nei loro log tecnici l'indirizzo IP e i dati di base del browser di chi visita, per far funzionare e proteggere il servizio. Il trasferimento verso gli USA avviene con le garanzie previste dal GDPR (Data Privacy Framework UE-USA e clausole contrattuali standard).</li>
+  <li>Font e codice della pagina sono serviti dal sito stesso: nessuna richiesta a Google o ad altri servizi esterni.</li>
+</ul>
+
+<h2>Sul tuo dispositivo</h2>
+<p>Pari non usa cookie, né strumenti di analisi o pubblicità. Salva nella memoria locale del browser (<code>localStorage</code>) solo due cose, per comodità tua: l'elenco dei gruppi che hai aperto e quale persona sei in ciascun gruppo. Restano sul dispositivo e non vengono inviate a nessuno. Le cancelli rimuovendo il gruppo dall'elenco o cancellando i dati del sito dal browser.</p>
+
+<h2>Perché e per quanto tempo</h2>
+<p>I dati servono solo a far funzionare il servizio che usi: tenere i conti del gruppo (art. 6.1.b del GDPR). I log tecnici servono a sicurezza e funzionamento (art. 6.1.f). I dati di un gruppo restano finché il gruppo esiste: eliminando una spesa o l'intero gruppo dall'app, i dati vengono cancellati subito e non si possono recuperare. I log vengono conservati per il tempo deciso da GitHub e Supabase.</p>
+
+<h2>I tuoi diritti</h2>
+<p>Puoi chiedere di accedere ai dati che ti riguardano, correggerli, cancellarli, limitarne l'uso o opporti, scrivendo a <a href="mailto:docdandi@gmail.com">docdandi@gmail.com</a>. Indica il link del gruppo, altrimenti non è possibile trovarlo. Hai anche il diritto di presentare reclamo al <a href="https://www.garanteprivacy.it" rel="noopener">Garante per la protezione dei dati personali</a>.</p>
+
+<p style="margin-top:28px"><a href="./">← Torna a Pari</a></p>
+</main>
+</body>
+</html>

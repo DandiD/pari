@@ -9,9 +9,7 @@
 <title>Pari</title>
 <meta name="description" content="Dividi le spese con gli amici. Niente account, niente limiti.">
 <link rel="icon" href="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 32 32'%3E%3Crect width='32' height='32' rx='8' fill='%232E39C9'/%3E%3Ctext x='16' y='23' font-family='Arial' font-weight='700' font-size='20' text-anchor='middle' fill='white'%3Ep%3C/text%3E%3C/svg%3E">
-<link rel="preconnect" href="https://fonts.googleapis.com">
-<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
-<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Familjen+Grotesk:wght@500;600;700&family=Figtree:wght@400;500;600&family=IBM+Plex+Mono:wght@400;500&display=swap">
+<link rel="stylesheet" href="fonts/fonts.css">
 <style>
 /* Layout: app shell, one column on phone; from 900px the expense ledger sits left and balances + stats sit right. Receipt metaphor for settle-up. */
 :root{
@@ -260,8 +258,10 @@ img{max-width:100%}
 .joinrow .inp{flex:1;min-width:200px}
 @media (max-width:899px){ .toast{bottom:calc(84px + env(safe-area-inset-bottom, 0px))} }
 .foot-note{font-size:12.5px;color:var(--muted);text-align:center;padding-top:8px}
+.legal{font-size:12px;color:var(--muted);text-align:center;margin:12px 0 0}
+.legal a{color:inherit}
 </style>
-<script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2.45.4/dist/umd/supabase.js"></script>
+<script src="vendor/supabase.js"></script><!-- @supabase/supabase-js 2.45.4 -->
 <script src="config.js"></script>
 </head>
 <body>
@@ -534,10 +534,11 @@ function render(){
     return;
   }
   const g = S.gid && group();
-  app.innerHTML = top + banner + (g ? renderGroup(g) : renderHome());
+  app.innerHTML = top + banner + (g ? renderGroup(g) : renderHome()) + LEGAL;
   const q = $("#quickIn"); if (q && S.focusQuick){ q.focus(); q.setSelectionRange(q.value.length,q.value.length); S.focusQuick=false; }
 }
 
+const LEGAL = `<p class="legal"><a href="privacy.html">Privacy</a> · niente cookie, niente tracciamento</p>`;
 const JOIN = `<form class="card" id="joinForm" autocomplete="off"><h2>Hai ricevuto un link?</h2><div class="joinrow"><input class="inp" id="joinIn" placeholder="Incolla qui il link del gruppo" aria-label="Link del gruppo"><button class="btn" type="submit">Apri il gruppo</button></div></form>`;
 function renderHome(){
   const gs = [...S.groups].sort((a,b)=>(b.updatedAt||0)-(a.updatedAt||0));

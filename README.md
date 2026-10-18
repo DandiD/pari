@@ -8,6 +8,8 @@ Dividi le spese con gli amici. Niente account, niente limiti di spese al giorno.
 ```
 index.html                                  l'app
 config.js                                   URL e publishable key di Supabase
+privacy.html                                informativa privacy (linkata in fondo all'app)
+fonts/, vendor/                             font e supabase-js serviti dal sito, senza CDN esterni
 supabase/migrations/20261018000000_pari.sql schema, regole di accesso, funzioni
 supabase/zanego.local.sql                   ricrea "Zanego ott 26" (NON va su GitHub)
 ```
