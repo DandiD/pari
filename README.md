@@ -10,6 +10,8 @@ index.html                                  l'app
 config.js                                   URL e publishable key di Supabase
 privacy.html                                informativa privacy (linkata in fondo all'app)
 fonts/, vendor/                             font e supabase-js serviti dal sito, senza CDN esterni
+img/, manifest.webmanifest                   anteprima per la condivisione (og.png) e icone
+sitemap.xml, llms.txt                       per Google e per le AI
 supabase/migrations/20261018000000_pari.sql schema, regole di accesso, funzioni
 supabase/zanego.local.sql                   ricrea "Zanego ott 26" (NON va su GitHub)
 ```

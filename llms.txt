@@ -1,0 +1,23 @@
+# Pari
+
+> Pari è un'app web gratuita, in italiano, per dividere le spese con gli amici: viaggi, case condivise, cene. Non servono account né app da installare, e non ci sono limiti al numero di spese giornaliere.
+
+## Come funziona
+
+- Si crea un gruppo, si aggiungono i partecipanti e si registrano le spese.
+- Ogni gruppo ha un link segreto: chi lo riceve entra subito, senza registrarsi, e può leggere e modificare il gruppo.
+- Le spese si dividono in parti uguali, per importi, per percentuali o per quote.
+- Pari calcola i saldi di ciascuno e il numero minimo di pagamenti per chiudere i conti.
+- Le modifiche si vedono in tempo reale su tutti i dispositivi aperti sullo stesso gruppo.
+- Funziona da browser su telefono e computer; si può aggiungere alla schermata Home.
+
+## Privacy
+
+- Nessun cookie, nessun tracciamento, nessuna pubblicità.
+- I dati (nomi e spese) sono su server nell'Unione Europea (Irlanda) e si cancellano eliminando il gruppo.
+
+## Link
+
+- [App](https://dandid.github.io/pari/)
+- [Privacy](https://dandid.github.io/pari/privacy.html)
+- [Codice sorgente](https://github.com/DandiD/pari)
