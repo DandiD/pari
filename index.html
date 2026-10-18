@@ -296,7 +296,11 @@ img{max-width:100%}
 .joinrow .inp{flex:1;min-width:200px}
 @media (max-width:899px){ .toast{bottom:calc(84px + env(safe-area-inset-bottom, 0px))} }
 .foot-note{font-size:12.5px;color:var(--muted);text-align:center;padding-top:8px}
-.legal{font-size:12px;color:var(--muted);text-align:center;margin:12px 0 0}
+.intro{max-width:1080px;margin:36px auto 0;padding-top:20px;border-top:1px solid var(--line);color:var(--muted);font-size:14px}
+.intro h2{color:var(--ink);font-size:16px;margin-bottom:6px}
+.intro p{margin:0 0 8px;max-width:640px}
+.intro ul{margin:0;padding-left:18px;max-width:640px}
+.legal{max-width:1080px;font-size:12px;color:var(--muted);text-align:center;margin:20px auto 0}
 .legal a{color:inherit}
 </style>
 <script src="vendor/supabase.js"></script><!-- @supabase/supabase-js 2.45.4 -->
@@ -307,6 +311,16 @@ img{max-width:100%}
   <div class="top"><div class="brand"><b>pari<i>.</i></b><span>conti divisi, senza limiti</span></div></div>
   <div class="skeleton"></div>
 </div>
+<section class="intro" id="intro" aria-labelledby="intro-h">
+  <h2 id="intro-h">Cos'è Pari</h2>
+  <p>Pari è un'app gratuita per dividere le spese con gli amici: un viaggio, la casa in condivisione, una cena. Crei un gruppo, aggiungi chi partecipa e mandi il link. Chi lo apre entra subito, senza account e senza scaricare niente.</p>
+  <ul>
+    <li>Dividi ogni spesa in parti uguali, per importi, per percentuali o per quote.</li>
+    <li>Pari calcola chi deve cosa e il modo più corto per chiudere i conti.</li>
+    <li>Nessun limite di spese, nessuna pubblicità, nessun cookie.</li>
+  </ul>
+</section>
+<p class="legal"><a href="privacy.html">Privacy</a> · niente cookie, niente tracciamento</p>
 <div id="sheetRoot"></div>
 <div id="toastRoot"></div>
 
@@ -555,6 +569,7 @@ function handleWriteError(err, fallback){
 /* ---------- render ---------- */
 function render(){
   const app = $("#app");
+  $("#intro").hidden = !!S.gid;
   const top = `<div class="top"><div class="brand"><b>pari<i>.</i></b><span>conti divisi, senza limiti</span></div>${S.gid && group() ? `<button class="btn ghost small" data-act="home">← Tutti i gruppi</button>` : ""}</div>`;
   const banner = store.mode==="local" ? `<div class="banner">Anteprima: il database non è ancora collegato, quindi vedi un gruppo di esempio e le modifiche non vengono salvate. Inserisci la chiave di Supabase in config.js.</div>`
     : (!store.canWrite ? `<div class="banner">Puoi vedere i conti ma non aggiungere spese. Chiedi a chi ha creato il gruppo di aggiungerti alla pagina con la tua email, come Editor, poi ricarica.</div>` : "");
@@ -572,11 +587,10 @@ function render(){
     return;
   }
   const g = S.gid && group();
-  app.innerHTML = top + banner + (g ? renderGroup(g) : renderHome()) + LEGAL;
+  app.innerHTML = top + banner + (g ? renderGroup(g) : renderHome());
   const q = $("#quickIn"); if (q && S.focusQuick){ q.focus(); q.setSelectionRange(q.value.length,q.value.length); S.focusQuick=false; }
 }
 
-const LEGAL = `<p class="legal"><a href="privacy.html">Privacy</a> · niente cookie, niente tracciamento</p>`;
 const JOIN = `<form class="card" id="joinForm" autocomplete="off"><h2>Hai ricevuto un link?</h2><div class="joinrow"><input class="inp" id="joinIn" placeholder="Incolla qui il link del gruppo" aria-label="Link del gruppo"><button class="btn" type="submit">Apri il gruppo</button></div></form>`;
 function renderHome(){
   const gs = [...S.groups].sort((a,b)=>(b.updatedAt||0)-(a.updatedAt||0));
