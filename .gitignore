@@ -1,0 +1,8 @@
+# Contiene l'id segreto del gruppo Zanego
+supabase/zanego.local.sql
+*.local.sql
+
+# File temporanei della Supabase CLI
+supabase/.temp/
+
+.DS_Store
