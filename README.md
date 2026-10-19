@@ -10,7 +10,8 @@ index.html                                  l'app
 config.js                                   URL e publishable key di Supabase
 privacy.html                                informativa privacy (linkata in fondo all'app)
 fonts/, vendor/                             font e supabase-js serviti dal sito, senza CDN esterni
-img/, manifest.webmanifest                   anteprima per la condivisione (og.png) e icone
+img/, manifest.webmanifest                   logo (pari-logo.png), icone dell'app e anteprima per la condivisione (og.png)
+sw.js                                       service worker: app installabile e apribile anche offline
 sitemap.xml, llms.txt                       per Google e per le AI
 supabase/migrations/20261018000000_pari.sql schema, regole di accesso, funzioni
 supabase/migrations/20261019000000_password.sql password facoltativa e amministratore del gruppo
@@ -86,6 +87,16 @@ Per gli aggiornamenti successivi basta un commit e un push su `main`: Pages si r
 - **Amministratore.** Il dispositivo di chi crea il gruppo riceve una chiave da amministratore (in `localStorage`). Solo con quella si cambia o toglie la password e si elimina il gruppo. Se si perde (cambio telefono, dati del browser cancellati), il gruppo resta usabile ma password ed eliminazione restano bloccate. I gruppi creati prima delle password non hanno amministratore: lo diventa chi imposta la password per primo.
 - **"I tuoi gruppi"** e la scelta "Tu sei" restano salvati sul dispositivo. Su un altro telefono basta riaprire il link.
 - **Se qualcosa non si carica**, controlla in **Project Settings → Data API** che l'API sia attiva e che lo schema `public` sia esposto. Le funzioni `pari_*` passano da lì.
+
+## App sul telefono
+
+Pari è una PWA: si installa dal browser, senza store.
+
+- **Android (Chrome, Edge, Samsung Internet)**: in alto compare **Installa l'app**, che apre la finestra di installazione del sistema.
+- **iPhone e iPad**: lo stesso pulsante spiega come fare da **Condividi → Aggiungi alla schermata Home**. Su iOS l'app installata ha dati separati da Safari, quindi "I tuoi gruppi" parte vuoto: si apre il gruppo incollando il link.
+- Una volta installata, il pulsante sparisce.
+
+`sw.js` tiene in cache la pagina, i font, gli script e le icone: l'app si apre anche senza rete, ma i gruppi si caricano solo online. La pagina è sempre scaricata prima dalla rete, quindi un push su `main` arriva subito. Se aggiungi o rinomini file statici, aggiorna la lista `SHELL` in `sw.js` e aumenta `VERSION`.
 
 ## Funzioni del database
 

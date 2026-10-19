@@ -4,7 +4,8 @@
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width,initial-scale=1,viewport-fit=cover">
 <meta name="referrer" content="no-referrer">
-<meta name="theme-color" content="#ECF0EE">
+<meta name="theme-color" content="#ECF0EE" media="(prefers-color-scheme: light)">
+<meta name="theme-color" content="#0E1412" media="(prefers-color-scheme: dark)">
 <title>Pari · Dividi le spese con gli amici, gratis e senza account</title>
 <meta name="description" content="Dividi le spese di viaggi, case e cene con gli amici. Gratis, senza account e senza limiti di spese: crei un gruppo, mandi il link e Pari calcola chi deve cosa.">
 <link rel="canonical" href="https://dandid.github.io/pari/">
@@ -22,6 +23,9 @@
 <link rel="apple-touch-icon" href="img/apple-touch-icon.png">
 <link rel="manifest" href="manifest.webmanifest">
 <meta name="apple-mobile-web-app-title" content="Pari">
+<meta name="apple-mobile-web-app-capable" content="yes">
+<meta name="mobile-web-app-capable" content="yes">
+<meta name="apple-mobile-web-app-status-bar-style" content="default">
 <script type="application/ld+json">
 {
   "@context": "https://schema.org",
@@ -46,7 +50,7 @@
   "author": { "@type": "Person", "name": "Daniele Merola" }
 }
 </script>
-<link rel="icon" href="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 32 32'%3E%3Crect width='32' height='32' rx='8' fill='%232E39C9'/%3E%3Ctext x='16' y='23' font-family='Arial' font-weight='700' font-size='20' text-anchor='middle' fill='white'%3Ep%3C/text%3E%3C/svg%3E">
+<link rel="icon" type="image/png" sizes="32x32" href="img/favicon-32.png">
 <link rel="stylesheet" href="fonts/fonts.css">
 <style>
 /* Layout: app shell, one column on phone; from 900px the expense ledger sits left and balances + stats sit right. Receipt metaphor for settle-up. */
@@ -99,6 +103,9 @@ h2{font-size:18px;font-weight:600}
 .brand b{font-family:var(--f-display);font-size:22px;font-weight:700;letter-spacing:-.02em}
 .brand b i{font-style:normal;color:var(--accent)}
 .brand span{font-size:13px;color:var(--muted)}
+.top .acts{display:flex;gap:6px;flex-wrap:nowrap}
+@media (max-width:520px){ .top.has-acts .brand span{display:none} }
+.steps{margin:0;padding-left:22px;display:flex;flex-direction:column;gap:8px}
 
 /* buttons */
 .btn{display:inline-flex;align-items:center;justify-content:center;gap:8px;border:1px solid var(--line);background:var(--surface);
@@ -591,7 +598,8 @@ function handleWriteError(err, fallback){
 /* ---------- render ---------- */
 function render(){
   const app = $("#app");
-  const top = `<div class="top"><div class="brand"><b>pari<i>.</i></b><span>conti divisi, senza limiti</span></div>${S.gid && group() ? `<button class="btn ghost small" data-act="home">← Tutti i gruppi</button>` : ""}</div>`;
+  const acts = (canInstall() ? `<button class="btn small" data-act="install">Installa l'app</button>` : "") + (S.gid && group() ? `<button class="btn ghost small" data-act="home">← Tutti i gruppi</button>` : "");
+  const top = `<div class="top${acts?" has-acts":""}"><div class="brand"><b>pari<i>.</i></b><span>conti divisi, senza limiti</span></div>${acts?`<div class="acts">${acts}</div>`:""}</div>`;
   const banner = store.mode==="local" ? `<div class="banner">Anteprima: il database non è ancora collegato, quindi vedi un gruppo di esempio e le modifiche non vengono salvate. Inserisci la chiave di Supabase in config.js.</div>`
     : (!store.canWrite ? `<div class="banner">Puoi vedere i conti ma non aggiungere spese. Chiedi a chi ha creato il gruppo di aggiungerti alla pagina con la tua email, come Editor, poi ricarica.</div>` : "");
   if (store.mode==="nodb"){
@@ -984,6 +992,36 @@ function inviteSheet(g){
     });
   });
 }
+/* ---------- installazione (PWA) ---------- */
+// Chrome, Edge e Samsung Internet danno l'evento beforeinstallprompt; Safari su iPhone no, lì si spiega come fare a mano.
+const IOS = /iphone|ipad|ipod/i.test(navigator.userAgent) || (navigator.platform==="MacIntel" && navigator.maxTouchPoints>1);
+let installEvt = null;
+function standalone(){ return matchMedia("(display-mode: standalone)").matches || navigator.standalone===true; }
+function canInstall(){ return !standalone() && (!!installEvt || IOS); }
+window.addEventListener("beforeinstallprompt", e=>{ e.preventDefault(); installEvt = e; render(); });
+window.addEventListener("appinstalled", ()=>{ installEvt = null; render(); toast("Pari è installata: la trovi tra le tue app"); });
+async function install(){
+  if (!installEvt){ iosInstallSheet(); return; }
+  const e = installEvt; installEvt = null;
+  e.prompt();
+  try { await e.userChoice; } catch(err){}
+  render();
+}
+function iosInstallSheet(){
+  const g = S.gid && group();
+  openSheet(`<div class="sh"><h2>Installa Pari</h2><button class="btn ghost iconbtn" data-x aria-label="Chiudi">✕</button></div>
+    <ol class="steps"><li>Tocca <b>Condividi</b>, il quadrato con la freccia verso l'alto (in Safari è in basso o accanto all'indirizzo).</li>
+      <li>Scorri e scegli <b>Aggiungi alla schermata Home</b>.</li>
+      <li>Tocca <b>Aggiungi</b>. Pari compare tra le tue app.</li></ol>
+    <p class="muted" style="margin:0;font-size:13px">Su iPhone l'app installata non vede i gruppi aperti in Safari: la prima volta incolla il link del gruppo nella home dell'app.${g?" Copialo ora, così è pronto.":""}</p>
+    ${g ? `<div class="actions"><span></span><button class="btn primary" data-copy>Copia il link del gruppo</button></div>` : ""}`, r=>{
+    r.querySelector("[data-x]").onclick = closeSheet;
+    const c = r.querySelector("[data-copy]");
+    if (c) c.onclick = async ()=>{ try { await navigator.clipboard.writeText(groupLink(g.id)); toast("Link copiato"); } catch(err){ toast(groupLink(g.id)); } };
+  });
+}
+if ("serviceWorker" in navigator) window.addEventListener("load", ()=>{ navigator.serviceWorker.register("sw.js").catch(()=>{}); });
+
 /* ---------- toast ---------- */
 let toastT;
 function toast(msg, undo){
@@ -1023,6 +1061,7 @@ document.addEventListener("click", async ev=>{
   else if (act==="open") openGroup(t.dataset.id);
   else if (act==="newGroup") groupSheet(null);
   else if (act==="about") aboutSheet();
+  else if (act==="install") install();
   else if (act==="editGroup" && g) groupSheet(g);
   else if (act==="exampleGroup"){
     const {g:eg, exps} = exampleGroup(); t.disabled = true; lsSet("pari.adm."+eg.id, secureId(32));

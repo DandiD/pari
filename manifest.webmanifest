@@ -1,15 +1,20 @@
 {
+  "id": "./",
   "name": "Pari: dividi le spese con gli amici",
   "short_name": "Pari",
   "description": "Dividi le spese con gli amici. Niente account, niente limiti.",
   "lang": "it",
+  "dir": "ltr",
   "start_url": "./",
   "scope": "./",
   "display": "standalone",
-  "background_color": "#ECF0EE",
+  "background_color": "#FDF9F2",
   "theme_color": "#ECF0EE",
+  "categories": ["finance", "utilities"],
   "icons": [
-    { "src": "img/icon-192.png", "sizes": "192x192", "type": "image/png", "purpose": "any maskable" },
-    { "src": "img/icon-512.png", "sizes": "512x512", "type": "image/png", "purpose": "any maskable" }
+    { "src": "img/icon-192.png", "sizes": "192x192", "type": "image/png", "purpose": "any" },
+    { "src": "img/icon-512.png", "sizes": "512x512", "type": "image/png", "purpose": "any" },
+    { "src": "img/icon-maskable-192.png", "sizes": "192x192", "type": "image/png", "purpose": "maskable" },
+    { "src": "img/icon-maskable-512.png", "sizes": "512x512", "type": "image/png", "purpose": "maskable" }
   ]
 }
