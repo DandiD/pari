@@ -435,10 +435,15 @@ const KNOWN = "pari.groups";
 function knownGroups(){ try { const v = JSON.parse(lsGet(KNOWN)||"[]"); return Array.isArray(v) ? v : []; } catch(e){ return []; } }
 function rememberGroup(g){
   const list = knownGroups().filter(x=>x.id!==g.id);
-  list.unshift({id:g.id, name:g.name, members:g.members, example:!!g.example, updatedAt:g.updatedAt||Date.now()});
+  list.unshift({id:g.id, name:g.name, members:g.members, example:!!g.example, private:!!g.private, updatedAt:g.updatedAt||Date.now()});
   lsSet(KNOWN, JSON.stringify(list.slice(0,50)));
 }
 function forgetGroup(gid){ lsSet(KNOWN, JSON.stringify(knownGroups().filter(x=>x.id!==gid))); }
+// Gruppi con password: il token si ottiene con la password giusta e cambia quando cambia la password.
+// La chiave da amministratore sta solo sul dispositivo di chi ha creato il gruppo.
+const tokenOf = gid => lsGet("pari.tok."+gid);
+const adminOf = gid => lsGet("pari.adm."+gid);
+const isAdmin = g => !g.hasAdmin || !!adminOf(g.id);
 function secureId(n=24){
   const a = "ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789", b = new Uint8Array(n);
   crypto.getRandomValues(b); return Array.from(b, x=>a[x % a.length]).join("");
@@ -469,16 +474,17 @@ const store = {
     const load = async ()=>{
       const my = ++seq;
       try {
-        const d = await this.rpc("pari_get", { p_group: gid });
+        const d = await this.rpc("pari_get", { p_group: gid, p_token: tokenOf(gid) });
         if (!alive || my!==seq) return;
         if (!d){ cb(null, "missing"); return; }
+        if (d.locked){ lsSet("pari.tok."+gid, null); cb(null, "locked"); return; }
         this.full[gid] = d.group; rememberGroup(d.group); this.notifyGroups();
         cb(d.expenses || []);
       } catch(err){ if (alive && my===seq) cb(undefined, "error"); }
     };
     this.reload = load;
     load();
-    const ch = this.sb.channel("pari-" + gid).on("broadcast", { event:"changed" }, ()=>load()).subscribe();
+    const ch = this.sb.channel("pari-" + (tokenOf(gid) || gid)).on("broadcast", { event:"changed" }, ()=>load()).subscribe();
     this.chan = ch;
     const timer = setInterval(()=>{ if (document.visibilityState==="visible") load(); }, 20000);
     const vis = ()=>{ if (document.visibilityState==="visible") load(); };
@@ -493,8 +499,9 @@ const store = {
   async saveGroup(g){
     const { id, ...body } = g; body.updatedAt = Date.now();
     if (this.mode==="remote"){
-      await this.rpc("pari_save_group", { p_group:id, p_name:body.name, p_members:body.members, p_example:!!body.example });
-      this.full[id] = { ...(this.full[id]||{}), id, name:body.name, members:body.members, example:!!body.example, updatedAt:body.updatedAt };
+      const isNew = !this.full[id];
+      await this.rpc("pari_save_group", { p_group:id, p_name:body.name, p_members:body.members, p_example:!!body.example, p_token:tokenOf(id), p_admin:adminOf(id) });
+      this.full[id] = { ...(isNew ? {private:false, hasAdmin:!!adminOf(id)} : this.full[id]), id, name:body.name, members:body.members, example:!!body.example, updatedAt:body.updatedAt };
       rememberGroup(this.full[id]); this.notifyGroups();
       if (S.gid===id) await this.changed();
       return;
@@ -503,20 +510,35 @@ const store = {
   },
   async deleteGroup(gid){
     if (this.mode==="remote"){
-      await this.rpc("pari_delete_group", { p_group:gid });
+      await this.rpc("pari_delete_group", { p_group:gid, p_token:tokenOf(gid), p_admin:adminOf(gid) });
       try { if (this.chan) await this.chan.send({ type:"broadcast", event:"changed", payload:{} }); } catch(e){}
-      forgetGroup(gid); delete this.full[gid]; this.notifyGroups(); return;
+      forgetGroup(gid); lsSet("pari.tok."+gid, null); lsSet("pari.adm."+gid, null); delete this.full[gid]; this.notifyGroups(); return;
     }
     delete this.memG[gid]; delete this.memE[gid]; this.notifyGroups();
   },
   async saveExpense(gid, e){
     const { id, ...body } = e;
-    if (this.mode==="remote"){ await this.rpc("pari_save_expense", { p_group:gid, p_id:id, p_body:body }); await this.changed(); return; }
+    if (this.mode==="remote"){ await this.rpc("pari_save_expense", { p_group:gid, p_id:id, p_body:body, p_token:tokenOf(gid) }); await this.changed(); return; }
     (this.memE[gid] = this.memE[gid]||{})[id] = { id, ...body }; (this.eL[gid]||[]).forEach(f=>f());
   },
   async deleteExpense(gid, eid){
-    if (this.mode==="remote"){ await this.rpc("pari_delete_expense", { p_group:gid, p_id:eid }); await this.changed(); return; }
+    if (this.mode==="remote"){ await this.rpc("pari_delete_expense", { p_group:gid, p_id:eid, p_token:tokenOf(gid) }); await this.changed(); return; }
     delete (this.memE[gid]||{})[eid]; (this.eL[gid]||[]).forEach(f=>f());
+  },
+  // {token} se la password è giusta, altrimenti {error}
+  async unlock(gid, pass){
+    const r = await this.rpc("pari_unlock", { p_group:gid, p_pass:pass }) || {};
+    if (!r.error) lsSet("pari.tok."+gid, r.token || null);
+    return r;
+  },
+  // Imposta, cambia o toglie (pass vuota) la password. Su un gruppo senza amministratore, chi la imposta lo diventa.
+  async setPassword(gid, pass){
+    const adm = adminOf(gid) || secureId(32);
+    const token = await this.rpc("pari_set_password", { p_group:gid, p_token:tokenOf(gid), p_admin:adm, p_new:pass || null });
+    lsSet("pari.adm."+gid, adm); lsSet("pari.tok."+gid, token || null);
+    this.full[gid] = { ...(this.full[gid]||{}), private:!!token, hasAdmin:true };
+    rememberGroup(this.full[gid]); this.notifyGroups();
+    await this.changed();
   }
 };
 function exampleGroup(){
@@ -544,7 +566,7 @@ function seedLocal(){
 }
 
 /* ---------- state ---------- */
-const S = { groups:null, gid:null, exps:null, tab:"spese", unsubE:null, quick:"", loadErr:false, missing:false };
+const S = { groups:null, gid:null, exps:null, tab:"spese", unsubE:null, quick:"", loadErr:false, missing:false, locked:false };
 const group = () => (S.groups||[]).find(g=>g.id===S.gid);
 const memberName = (g,id) => (g.members.find(m=>m.id===id)||{name:"Ex membro"}).name;
 const memberIdx = (g,id) => Math.max(0, g.members.findIndex(m=>m.id===id));
@@ -560,6 +582,8 @@ function handleWriteError(err, fallback){
   const m = String((err && (err.message || err.details)) || "");
   if (/group_not_found/.test(m)){ toast("Questo gruppo non esiste più."); return true; }
   if (/group_full/.test(m)){ toast("Il gruppo ha troppe spese: eliminane qualcuna vecchia."); return true; }
+  if (/locked/.test(m)){ toast("La password del gruppo è cambiata: inseriscila di nuovo."); lsSet("pari.tok."+S.gid, null); closeSheet(); if (S.gid) openGroup(S.gid); return true; }
+  if (/not_admin/.test(m)){ toast("Solo chi ha creato il gruppo può farlo."); return true; }
   if (fallback) toast(navigator.onLine===false ? "Sei offline: riprova quando torna la connessione." : fallback);
   return false;
 }
@@ -576,6 +600,15 @@ function render(){
     return;
   }
   if (S.groups===null){ app.innerHTML = top + `<div class="skeleton"></div>`; return; }
+  if (S.gid && S.locked){
+    app.innerHTML = top + `<form class="empty" id="unlockForm" autocomplete="off"><span class="eyebrow">Gruppo privato</span><h1>Serve la password.</h1>
+      <p>Chi ha creato questo gruppo l'ha protetto con una password. Chiedila a chi ti ha mandato il link.</p>
+      <div class="joinrow" style="width:100%"><input class="inp" id="unlockIn" type="password" placeholder="Password del gruppo" aria-label="Password del gruppo"><button class="btn primary" type="submit">Entra</button></div>
+      <div class="status bad" id="unlockErr" hidden></div>
+      <button class="btn ghost small" type="button" data-act="home">Vai ai tuoi gruppi</button></form>`;
+    setTimeout(()=>{ const i=$("#unlockIn"); if (i) i.focus(); }, 30);
+    return;
+  }
   if (S.gid && !group()){
     app.innerHTML = top + (S.missing
       ? `<div class="empty"><span class="eyebrow">Gruppo non trovato</span><h1>Questo link non porta a nessun gruppo.</h1><p>Controlla di aver copiato il link per intero, oppure chiedi a chi ti ha invitato di mandartelo di nuovo. Se il gruppo è stato eliminato, non si può recuperare.</p><button class="btn" data-act="home">Vai ai tuoi gruppi</button></div>`
@@ -598,7 +631,7 @@ function renderHome(){
   }
   return `<div class="row" style="justify-content:space-between"><h1>I tuoi gruppi</h1><div class="row" style="gap:6px"><button class="btn ghost" data-act="about">Cos'è Pari</button>${store.canWrite?`<button class="btn primary" data-act="newGroup">Nuovo gruppo</button>`:""}</div></div>
   <div class="groups">${gs.map(g=>`<button class="gcard" data-act="open" data-id="${esc(g.id)}">
-    <div class="row" style="justify-content:space-between;width:100%"><h3>${esc(g.name)}</h3>${g.example?`<span class="tag">Esempio</span>`:""}</div>
+    <div class="row" style="justify-content:space-between;width:100%"><h3>${esc(g.name)}</h3>${g.example?`<span class="tag">Esempio</span>`:g.private?`<span class="tag">Privato</span>`:""}</div>
     <div class="avatars">${g.members.map(m=>avatar(g,m.id)).join("")}</div>
     <div class="muted" style="font-size:13px">${g.members.length} ${g.members.length===1?"persona":"persone"}${getMe(g.id)?` · tu sei ${esc(memberName(g,getMe(g.id)))}`:""}</div>
   </button>`).join("")}</div>${JOIN}<p class="foot-note">L'elenco dei gruppi resta su questo dispositivo. Su un altro telefono riapri il link del gruppo.</p>`;
@@ -865,12 +898,22 @@ function groupSheet(existing){
   const involved = new Set();
   if (existing && S.exps) S.exps.forEach(e=>{ involved.add(e.payer); Object.keys(e.parts||{}).forEach(k=>involved.add(k)); });
   let confirmDel = false;
+  const remote = store.mode==="remote", admin = !existing || isAdmin(existing);
+  const pass = !remote ? ""
+    : !existing ? `<div class="field"><label for="g-pass">Password (facoltativa)</label><input class="inp" id="g-pass" type="password" autocomplete="new-password" placeholder="Lascia vuoto per entrare solo con il link">
+        <span class="muted" style="font-size:12.5px">Con la password, per entrare servono il link e la password. Potrai cambiarla solo tu.</span></div>`
+    : admin ? `<div class="field"><span class="flabel">Password</span>
+        <p class="muted" style="margin:0;font-size:13px">${g.private?"Il gruppo è privato: per entrare servono il link e la password.":"Chi ha il link entra senza password. Aggiungine una per rendere il gruppo privato."}</p>
+        <form class="row" id="g-pform" style="flex-wrap:nowrap" autocomplete="off"><input class="inp" id="g-pass" type="password" autocomplete="new-password" placeholder="${g.private?"Nuova password":"Scegli una password"}" style="flex:1" aria-label="Password del gruppo"><button class="btn" type="submit">${g.private?"Cambia":"Imposta"}</button></form>
+        ${g.private?`<button class="btn ghost small" type="button" data-pclear style="align-self:flex-start">Togli la password</button>`:""}</div>`
+    : g.private ? `<p class="muted" style="margin:0;font-size:13px">Gruppo privato. Solo chi l'ha creato può cambiare la password o eliminarlo.</p>` : "";
   const html = `<div class="sh"><h2>${existing?"Modifica gruppo":"Nuovo gruppo"}</h2><button class="btn ghost iconbtn" data-x aria-label="Chiudi">✕</button></div>
     <div class="field"><label for="g-name">Nome</label><input class="inp" id="g-name" value="${esc(g.name)}" placeholder="Es. Casa via Po, Sardegna 2027"></div>
     <div class="field"><span class="flabel">Persone</span><div id="g-members"></div>
       <form class="row" id="g-add" style="margin-top:6px;flex-wrap:nowrap"><input class="inp" id="g-new" placeholder="Nome" style="flex:1"><button class="btn" type="submit">Aggiungi</button></form></div>
+    ${pass}
     <div class="status" id="g-status" hidden></div>
-    <div class="actions">${existing?`<button class="btn danger" data-del>Elimina gruppo</button>`:"<span></span>"}<div class="row"><button class="btn" data-x>Annulla</button><button class="btn primary" data-save>${existing?"Salva":"Crea gruppo"}</button></div></div>`;
+    <div class="actions">${existing && admin?`<button class="btn danger" data-del>Elimina gruppo</button>`:"<span></span>"}<div class="row"><button class="btn" data-x>Annulla</button><button class="btn primary" data-save>${existing?"Salva":"Crea gruppo"}</button></div></div>`;
   openSheet(html, root=>{
     root.querySelectorAll("[data-x]").forEach(b=>b.onclick=closeSheet);
     const list = $("#g-members",root), save = root.querySelector("[data-save]"), st=$("#g-status",root);
@@ -887,18 +930,34 @@ function groupSheet(existing){
       names.forEach(n=>g.members.push({id:uid(), name:n})); i.value=""; draw(); i.focus(); };
     draw();
     if (!existing) setTimeout(()=>$("#g-name",root).focus(),30);
+    const fail = (err, msg)=>{ if (!handleWriteError(err)){ st.hidden=false; st.className="status bad"; st.textContent=msg; } };
+    const setPass = async (value, btn)=>{
+      if (value && (value.length<4 || value.length>72)){ st.hidden=false; st.className="status bad"; st.textContent="La password deve avere da 4 a 72 caratteri."; return; }
+      btn.disabled = true;
+      try { await store.setPassword(g.id, value); closeSheet(); openGroup(g.id);
+        toast(value ? "Password impostata. Mandala al gruppo a parte, non insieme al link." : "Password tolta: ora basta il link."); }
+      catch(err){ btn.disabled = false; fail(err, "Non sono riuscito a cambiare la password. Riprova."); }
+    };
+    const pform = $("#g-pform",root);
+    if (pform) pform.onsubmit = ev=>{ ev.preventDefault(); const v=$("#g-pass",root).value; if (v) setPass(v, pform.querySelector("button")); };
+    const pclear = root.querySelector("[data-pclear]");
+    if (pclear) pclear.onclick = ()=>setPass("", pclear);
     const del = root.querySelector("[data-del]");
     if (del) del.onclick = async ()=>{
       if (!confirmDel){ confirmDel=true; del.textContent="Elimina gruppo e tutte le spese"; return; }
       del.disabled = true;
       try { await store.deleteGroup(g.id, (S.exps||[]).map(e=>e.id)); closeSheet(); goHome(); toast("Gruppo eliminato"); }
-      catch(err){ del.disabled=false; st.hidden=false; st.className="status bad"; st.textContent="Eliminazione non riuscita. Riprova."; }
+      catch(err){ del.disabled=false; fail(err, "Eliminazione non riuscita. Riprova."); }
     };
     save.onclick = async ()=>{
       const pending = $("#g-new",root).value.trim(); if (pending){ pending.split(",").map(s=>s.trim()).filter(Boolean).forEach(n=>g.members.push({id:uid(),name:n})); }
       g.name = $("#g-name",root).value.trim(); g.members = g.members.map(m=>({id:m.id, name:m.name.trim()})).filter(m=>m.name || involved.has(m.id));
+      const newPass = !existing && remote ? $("#g-pass",root).value : "";
+      if (newPass && (newPass.length<4 || newPass.length>72)){ st.hidden=false; st.className="status bad"; st.textContent="La password deve avere da 4 a 72 caratteri."; return; }
+      if (!existing && !adminOf(g.id)) lsSet("pari.adm."+g.id, secureId(32));
       save.disabled = true;
-      try { await store.saveGroup(g); closeSheet(); if (!existing) openGroup(g.id); toast(existing?"Gruppo aggiornato":"Gruppo creato"); }
+      try { await store.saveGroup(g); if (newPass) await store.setPassword(g.id, newPass);
+        closeSheet(); if (!existing) openGroup(g.id); toast(existing?"Gruppo aggiornato":newPass?"Gruppo privato creato":"Gruppo creato"); }
       catch(err){ save.disabled=false; st.hidden=false; st.className="status bad"; st.textContent = err && err.code==="quota_exceeded" ? "Spazio esaurito per nuovi gruppi." : "Salvataggio non riuscito. Riprova."; }
     };
   });
@@ -907,9 +966,12 @@ function groupSheet(existing){
 function groupLink(gid){ return location.origin + location.pathname + "#" + gid; }
 function inviteSheet(g){
   const link = groupLink(g.id);
-  const msg = `Teniamo i conti di "${g.name}" su Pari: ${link}\nApri il link, scegli il tuo nome e aggiungi le spese che paghi tu. Non serve nessun account.`;
+  const msg = `Teniamo i conti di "${g.name}" su Pari: ${link}\nApri il link, scegli il tuo nome e aggiungi le spese che paghi tu. Non serve nessun account.`
+    + (g.private ? `\nIl gruppo è protetto: ti mando la password a parte.` : "");
   const html = `<div class="sh"><h2>Invita nel gruppo</h2><button class="btn ghost iconbtn" data-x aria-label="Chiudi">✕</button></div>
-    <p class="muted" style="margin:0">Chi ha questo link può vedere e modificare il gruppo, senza registrarsi. Mandalo solo a chi ne fa parte.</p>
+    <p class="muted" style="margin:0">${g.private
+      ? "Il gruppo è privato: per entrare servono il link e la password. Manda la password a parte, non nello stesso messaggio."
+      : "Chi ha questo link può vedere e modificare il gruppo, senza registrarsi. Mandalo solo a chi ne fa parte."}</p>
     <div class="field"><span class="flabel">Messaggio per il gruppo</span><textarea class="inp" id="inv-msg" rows="4" readonly>${esc(msg)}</textarea>
       <div class="row"><button class="btn primary small" data-copy="inv-msg">Copia messaggio</button><button class="btn small" data-copy="inv-link">Copia solo il link</button></div>
       <input class="inp" id="inv-link" value="${esc(link)}" readonly aria-label="Link del gruppo" style="font-size:13px;font-family:var(--f-num)"></div>`;
@@ -936,9 +998,10 @@ function openGroup(gid){
   if (S.unsubE){ S.unsubE(); S.unsubE=null; }
   S.gid = gid; S.exps = null; S.tab = "spese"; S.quick="";
   try { history.replaceState(null,"","#"+gid); } catch(e){}
-  S.missing = false; S.loadErr = false;
+  S.missing = false; S.loadErr = false; S.locked = false;
   S.unsubE = store.watchExpenses(gid, (list, status)=>{
     if (status==="missing"){ S.missing = true; S.exps = []; render(); return; }
+    if (status==="locked"){ S.locked = true; S.exps = null; closeSheet(); render(); return; }
     if (status==="error"){ if (!S.exps) { S.loadErr = true; render(); } return; }
     S.loadErr = false; S.exps = list; render();
   });
@@ -962,7 +1025,7 @@ document.addEventListener("click", async ev=>{
   else if (act==="about") aboutSheet();
   else if (act==="editGroup" && g) groupSheet(g);
   else if (act==="exampleGroup"){
-    const {g:eg, exps} = exampleGroup(); t.disabled = true;
+    const {g:eg, exps} = exampleGroup(); t.disabled = true; lsSet("pari.adm."+eg.id, secureId(32));
     try { await store.saveGroup(eg); for (const e of exps) await store.saveExpense(eg.id, e); openGroup(eg.id); }
     catch(err){ t.disabled=false; toast("Non sono riuscito a creare l'esempio. Riprova."); }
   }
@@ -996,6 +1059,22 @@ document.addEventListener("submit", async ev=>{
     const v = ($("#joinIn").value||"").trim(), m = v.match(/#?([A-Za-z0-9]{20,64})\s*$/);
     if (m){ try { history.replaceState(null,"","#"+m[1]); } catch(e){} openGroup(m[1]); }
     else toast("Il link non sembra quello di un gruppo Pari. Copialo di nuovo dalla chat.");
+    return;
+  }
+  if (ev.target.id==="unlockForm"){
+    ev.preventDefault();
+    const gid = S.gid, inp = $("#unlockIn"), err = $("#unlockErr"), btn = ev.target.querySelector("[type=submit]");
+    if (!gid || !inp.value) return;
+    btn.disabled = true;
+    try {
+      const r = await store.unlock(gid, inp.value);
+      if (!r.error){ openGroup(gid); return; }
+      err.hidden = false;
+      err.textContent = r.error==="too_many_attempts" ? "Troppi tentativi sbagliati. Riprova tra 15 minuti."
+        : r.error==="group_not_found" ? "Questo gruppo non esiste più." : "Password sbagliata.";
+      inp.select();
+    } catch(e){ err.hidden = false; err.textContent = "Non riesco a controllare la password. Controlla la connessione e riprova."; }
+    btn.disabled = false;
     return;
   }
   if (ev.target.id!=="quickForm") return;
