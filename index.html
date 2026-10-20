@@ -560,6 +560,14 @@ const store = {
     if (this.mode==="remote"){ await this.rpc("pari_delete_expense", { p_group:gid, p_id:eid, p_token:tokenOf(gid), p_author:deviceKey(), p_admin:adminOf(gid) }); await this.changed(); return; }
     delete (this.memE[gid]||{})[eid]; (this.eL[gid]||[]).forEach(f=>f());
   },
+  // Link da amministratore: se la chiave è giusta la salva qui, con il token per entrare nei gruppi privati
+  async claimAdmin(gid, key){
+    if (this.mode!=="remote"){ lsSet("pari.adm."+gid, key); return true; }
+    const r = await this.rpc("pari_claim_admin", { p_group:gid, p_admin:key }) || {};
+    if (!r.ok) return false;
+    lsSet("pari.adm."+gid, key); if (r.token) lsSet("pari.tok."+gid, r.token);
+    return true;
+  },
   // {token} se la password è giusta, altrimenti {error}
   async unlock(gid, pass){
     const r = await this.rpc("pari_unlock", { p_group:gid, p_pass:pass }) || {};
@@ -958,7 +966,7 @@ function groupSheet(existing){
     : admin ? `<div class="field"><span class="flabel">Password</span>
         <p class="muted" style="margin:0;font-size:13px">${g.private?"Il gruppo è privato: nella home se ne vede solo il nome, per entrare serve la password.":"Il gruppo è visibile a tutti nella home di Pari e chiunque può entrare. Aggiungi una password per renderlo privato."}</p>
         <form class="row" id="g-pform" style="flex-wrap:nowrap" autocomplete="off">${pwInput(`id="g-pass" autocomplete="new-password" placeholder="${g.private?"Nuova password":"Scegli una password"}" aria-label="Password del gruppo"`)}<button class="btn" type="submit">${g.private?"Cambia":"Imposta"}</button></form>
-        ${g.private?`<button class="btn ghost small" type="button" data-pclear style="align-self:flex-start">Togli la password</button>`:""}</div>`
+        ${g.private?`<button class="btn ghost small" type="button" data-pclear style="align-self:flex-start">Togli la password</button>`:""}</div>${adminOf(g.id) ? adminLinkField(g) : ""}`
     : g.private ? `<p class="muted" style="margin:0;font-size:13px">Gruppo privato. Solo chi l'ha creato può cambiare la password o eliminarlo.</p>` : "";
   const html = `<div class="sh"><h2>${existing?"Modifica gruppo":"Nuovo gruppo"}</h2><button class="btn ghost iconbtn" data-x aria-label="Chiudi">✕</button></div>
     <div class="field"><label for="g-name">Nome</label><input class="inp" id="g-name" value="${esc(g.name)}" placeholder="Es. Casa via Po, Sardegna 2027"></div>
@@ -993,6 +1001,7 @@ function groupSheet(existing){
     };
     const pform = $("#g-pform",root);
     if (pform) pform.onsubmit = ev=>{ ev.preventDefault(); const v=$("#g-pass",root).value; if (v) setPass(v, pform.querySelector("button")); };
+    const al = root.querySelector("[data-adminlink]"); if (al) al.onclick = ()=>shareAdminLink(g);
     const pclear = root.querySelector("[data-pclear]");
     if (pclear) pclear.onclick = ()=>setPass("", pclear);
     const del = root.querySelector("[data-del]");
@@ -1010,13 +1019,49 @@ function groupSheet(existing){
       if (!existing && !adminOf(g.id)) lsSet("pari.adm."+g.id, secureId(32));
       save.disabled = true;
       try { await store.saveGroup(g); if (newPass) await store.setPassword(g.id, newPass);
-        closeSheet(); if (!existing) openGroup(g.id); toast(existing?"Gruppo aggiornato":newPass?"Gruppo privato creato":"Gruppo creato"); }
+        closeSheet(); if (!existing){ openGroup(g.id); if (remote) adminLinkSheet(g); } toast(existing?"Gruppo aggiornato":newPass?"Gruppo privato creato":"Gruppo creato"); }
       catch(err){ save.disabled=false; st.hidden=false; st.className="status bad"; st.textContent = err && err.code==="quota_exceeded" ? "Spazio esaurito per nuovi gruppi." : "Salvataggio non riuscito. Riprova."; }
     };
   });
 }
 
 function groupLink(gid){ return location.origin + location.pathname + "#" + gid; }
+// Link da amministratore: porta la chiave su un altro dispositivo (cambio telefono, dati cancellati, app installata)
+const adminLink = gid => groupLink(gid) + "&admin=" + adminOf(gid);
+const ADMIN_WHY = g => `Se cambi telefono o cancelli i dati del browser, aprilo per tornare amministratore${g.private?" ed entrare senza password":""}. Salvalo nelle note o mandalo a te stesso. Non darlo agli altri: chi lo apre può cambiare la password ed eliminare il gruppo.`;
+const adminLinkField = g => `<div class="field"><span class="flabel">Link da amministratore</span>
+  <p class="muted" style="margin:0;font-size:13px">${ADMIN_WHY(g)}</p>
+  <button class="btn small" type="button" data-adminlink style="align-self:flex-start">${navigator.share?"Salva il link":"Copia il link"}</button></div>`;
+async function shareAdminLink(g){
+  const url = adminLink(g.id);
+  if (navigator.share){
+    try { await navigator.share({ title:`Pari · ${g.name} (amministratore)`, url }); return; }
+    catch(err){ if (err && err.name==="AbortError") return; }
+  }
+  try { await navigator.clipboard.writeText(url); toast("Link da amministratore copiato"); }
+  catch(err){ toast("Non riesco a copiarlo: riprova da Modifica"); }
+}
+function adminLinkSheet(g){
+  openSheet(`<div class="sh"><h2>Salva il link da amministratore</h2><button class="btn ghost iconbtn" data-x aria-label="Chiudi">✕</button></div>
+    <p class="muted" style="margin:0">Il gruppo è tuo: solo questo dispositivo può cambiare la password ed eliminarlo. ${ADMIN_WHY(g)}</p>
+    <div class="actions"><button class="btn" data-x>Più tardi</button><button class="btn primary" data-adminlink>${navigator.share?"Salva il link":"Copia il link"}</button></div>`, r=>{
+    r.querySelectorAll("[data-x]").forEach(b=>b.onclick=closeSheet);
+    r.querySelector("[data-adminlink]").onclick = async ()=>{ await shareAdminLink(g); closeSheet(); };
+  });
+}
+// #gruppo apre il gruppo; #gruppo&admin=chiave prima rende amministratori, poi lo apre
+function routeHash(h){
+  const m = h.match(/^([A-Za-z0-9]{8,64})(?:&admin=([A-Za-z0-9]{20,64}))?$/);
+  if (!m) return false;
+  if (m[2]) claimAdmin(m[1], m[2]); else if (m[1]!==S.gid) openGroup(m[1]);
+  return true;
+}
+async function claimAdmin(gid, key){
+  try { history.replaceState(null,"","#"+gid); } catch(e){} // la chiave non resta nella barra né nella cronologia
+  try { toast(await store.claimAdmin(gid, key) ? "Ora sei amministratore di questo gruppo" : "Questo link da amministratore non vale più: la chiave è stata cambiata."); }
+  catch(e){ toast("Non riesco a controllare il link. Controlla la connessione e riprova."); }
+  openGroup(gid);
+}
 function inviteSheet(g){
   const link = groupLink(g.id);
   const msg = `Teniamo i conti di "${g.name}" su Pari: ${link}\nApri il link, scegli il tuo nome e aggiungi le spese che paghi tu. Non serve nessun account.`
@@ -1157,8 +1202,8 @@ document.addEventListener("input", ev=>{
 document.addEventListener("submit", async ev=>{
   if (ev.target.id==="joinForm"){
     ev.preventDefault();
-    const v = ($("#joinIn").value||"").trim(), m = v.match(/#?([A-Za-z0-9]{20,64})\s*$/);
-    if (m){ try { history.replaceState(null,"","#"+m[1]); } catch(e){} openGroup(m[1]); }
+    const v = ($("#joinIn").value||"").trim(), m = v.match(/#?([A-Za-z0-9]{20,64}(?:&admin=[A-Za-z0-9]{20,64})?)\s*$/);
+    if (m) routeHash(m[1]);
     else toast("Il link non sembra quello di un gruppo Pari. Copialo di nuovo dalla chat.");
     return;
   }
@@ -1200,12 +1245,12 @@ document.addEventListener("submit", async ev=>{
     if (first){
       first = false;
       const h = (location.hash||"").slice(1);
-      if (h && /^[A-Za-z0-9]{8,64}$/.test(h)) { openGroup(h); return; }
+      if (h && routeHash(h)) return;
     }
     if (store.mode==="local" && S.gid && !list.some(g=>g.id===S.gid)) { goHome(); return; }
     render();
   });
-  window.addEventListener("hashchange", ()=>{ const h=(location.hash||"").slice(1); if (h && h!==S.gid && /^[A-Za-z0-9]{8,64}$/.test(h)) openGroup(h); });
+  window.addEventListener("hashchange", ()=>{ const h=(location.hash||"").slice(1); if (h) routeHash(h); });
 })();
 })();
 </script>

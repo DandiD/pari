@@ -17,6 +17,7 @@ supabase/migrations/20261018000000_pari.sql schema, regole di accesso, funzioni
 supabase/migrations/20261019000000_password.sql password facoltativa e amministratore del gruppo
 supabase/migrations/20261020000000_author.sql   solo chi inserisce una spesa può modificarla
 supabase/migrations/20261020010000_public_list.sql elenco pubblico dei gruppi per la home
+supabase/migrations/20261020020000_admin_link.sql  link da amministratore
 supabase/zanego.local.sql                   ricrea "Zanego ott 26" (NON va su GitHub)
 ```
 
@@ -87,7 +88,8 @@ Per gli aggiornamenti successivi basta un commit e un push su `main`: Pages si r
 - **Tutti i gruppi sono nella home, per chiunque apra Pari.** In un gruppo senza password chiunque entra e può aggiungere spese e modificare nome e partecipanti. Al primo accesso a un gruppo aperto, solo chi l'ha creato riceve l'invito a mettere una password. I gruppi di esempio non compaiono.
 - **Ogni spesa la modifica solo chi l'ha inserita.** Non ci sono account, quindi "chi" è il dispositivo: ognuno ha una chiave segreta in `localStorage` e la spesa ricorda l'hash della chiave di chi l'ha creata. Il controllo è nel database, non solo nella pagina. L'amministratore del gruppo può modificare ed eliminare tutte le spese, così niente resta bloccato se qualcuno cambia telefono. Le spese inserite prima di questa regola restano modificabili da tutti. Su iPhone l'app installata e Safari hanno chiavi diverse.
 - **Gruppi privati.** Chi crea un gruppo può aggiungere una password (alla creazione o da **Modifica**): nella home se ne vede solo il nome e per entrare serve la password. La password è salvata cifrata (bcrypt); dopo 10 tentativi sbagliati il gruppo si blocca per 15 minuti.
-- **Amministratore.** Il dispositivo di chi crea il gruppo riceve una chiave da amministratore (in `localStorage`). Solo con quella si cambia o toglie la password e si elimina il gruppo. Se si perde (cambio telefono, dati del browser cancellati), il gruppo resta usabile ma password ed eliminazione restano bloccate. I gruppi creati prima delle password non hanno amministratore: lo diventa chi imposta la password per primo.
+- **Amministratore.** Il dispositivo di chi crea il gruppo riceve una chiave da amministratore (in `localStorage`). Solo con quella si cambia o toglie la password e si elimina il gruppo.
+- **Link da amministratore.** Appena creato il gruppo, Pari propone di salvare il link `…/#gruppo&admin=chiave` (si ricopia da **Modifica**). Aperto o incollato su un altro dispositivo, rende amministratori e, nei gruppi privati, fa entrare senza password; la chiave sparisce subito dalla barra degli indirizzi. Se la chiave è persa del tutto, se ne genera una nuova dal SQL Editor (vedi `supabase/migrations/20261020020000_admin_link.sql`) e si apre il link con quella. I gruppi creati prima delle password non hanno amministratore: lo diventa chi imposta la password per primo.
 - **La scelta "Tu sei"**, le password già inserite e le chiavi (amministratore, autore delle spese) restano salvate sul dispositivo.
 - **Se qualcosa non si carica**, controlla in **Project Settings → Data API** che l'API sia attiva e che lo schema `public` sia esposto. Le funzioni `pari_*` passano da lì.
 
@@ -112,6 +114,7 @@ Pari è una PWA: si installa dal browser, senza store.
 | `pari_set_password(p_group, p_token, p_admin, p_new)` | imposta, cambia o toglie (`p_new` vuota) la password; solo l'amministratore; restituisce il nuovo token |
 | `pari_save_expense(p_group, p_id, p_body, p_token, p_author, p_admin)` | crea o aggiorna una spesa: importo in centesimi interi, massimo 3000 spese per gruppo; per modificarla serve la chiave di chi l'ha creata o quella da amministratore |
 | `pari_delete_expense(p_group, p_id, p_token, p_author, p_admin)` | elimina una spesa, con le stesse regole della modifica |
+| `pari_claim_admin(p_group, p_admin)` | `{ok: true, token}` se la chiave da amministratore è giusta (token solo per i gruppi privati), altrimenti `{ok: false}` |
 | `pari_delete_group(p_group, p_token, p_admin)` | elimina il gruppo e tutte le sue spese; se il gruppo ha un amministratore, serve la sua chiave |
 
 `p_token` serve solo per i gruppi con password: è derivato dalla password e smette di valere quando la password cambia.
