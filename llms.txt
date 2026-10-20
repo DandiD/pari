@@ -5,7 +5,7 @@
 ## Come funziona
 
 - Si crea un gruppo, si aggiungono i partecipanti e si registrano le spese.
-- Ogni gruppo ha un link segreto: chi lo riceve entra subito, senza registrarsi, e può leggere e modificare il gruppo.
+- Tutti i gruppi compaiono nella home: si entra con un tocco, senza registrarsi. Chi crea il gruppo può proteggerlo con una password: in quel caso gli altri ne vedono solo il nome.
 - Le spese si dividono in parti uguali, per importi, per percentuali o per quote.
 - Pari calcola i saldi di ciascuno e il numero minimo di pagamenti per chiudere i conti.
 - Le modifiche si vedono in tempo reale su tutti i dispositivi aperti sullo stesso gruppo.

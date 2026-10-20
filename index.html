@@ -32,7 +32,7 @@
   "@type": "WebApplication",
   "name": "Pari",
   "url": "https://dandid.github.io/pari/",
-  "description": "App web gratuita per dividere le spese con gli amici: viaggi, case condivise, cene. Senza account e senza limiti di spese. Ogni gruppo ha un link segreto per entrare; Pari calcola saldi e il numero minimo di pagamenti per chiudere i conti.",
+  "description": "App web gratuita per dividere le spese con gli amici: viaggi, case condivise, cene. Senza account e senza limiti di spese. Tutti i gruppi sono nella home e ognuno può avere una password; Pari calcola saldi e il numero minimo di pagamenti per chiudere i conti.",
   "inLanguage": "it",
   "applicationCategory": "FinanceApplication",
   "operatingSystem": "Web",
@@ -40,7 +40,8 @@
   "isAccessibleForFree": true,
   "offers": { "@type": "Offer", "price": "0", "priceCurrency": "EUR" },
   "featureList": [
-    "Nessun account: si entra con il link del gruppo",
+    "Nessun account: si entra dalla home o con il link del gruppo",
+    "Password facoltativa per i gruppi privati",
     "Nessun limite di spese giornaliere",
     "Divisione in parti uguali, per importi, percentuali o quote",
     "Calcolo dei saldi e del numero minimo di pagamenti",
@@ -476,6 +477,8 @@ const store = {
     this.sb = window.supabase.createClient(SUPABASE_URL, SUPABASE_KEY, { auth:{ persistSession:false, autoRefreshToken:false } });
     this.mode = "remote";
   },
+  // Tutti i gruppi, per la home (null in anteprima: lì bastano quelli in memoria)
+  async listAll(){ return this.mode==="remote" ? (await this.rpc("pari_list", {}) || []) : null; },
   async rpc(fn, args){ const { data, error } = await this.sb.rpc(fn, args); if (error) throw error; return data; },
   notifyGroups(){ this.gL.forEach(f=>f()); },
   watchGroups(cb){
@@ -594,7 +597,7 @@ function seedLocal(){
 }
 
 /* ---------- state ---------- */
-const S = { groups:null, gid:null, exps:null, tab:"spese", unsubE:null, quick:"", loadErr:false, missing:false, locked:false };
+const S = { groups:null, all:null, gid:null, exps:null, tab:"spese", unsubE:null, quick:"", loadErr:false, missing:false, locked:false };
 const group = () => (S.groups||[]).find(g=>g.id===S.gid);
 const memberName = (g,id) => (g.members.find(m=>m.id===id)||{name:"Ex membro"}).name;
 const memberIdx = (g,id) => Math.max(0, g.members.findIndex(m=>m.id===id));
@@ -652,19 +655,31 @@ function render(){
 }
 
 const JOIN = `<form class="card" id="joinForm" autocomplete="off"><h2>Hai ricevuto un link?</h2><div class="joinrow"><input class="inp" id="joinIn" placeholder="Incolla qui il link del gruppo" aria-label="Link del gruppo"><button class="btn" type="submit">Apri il gruppo</button></div></form>`;
+// Tutti i gruppi del database, più quelli di esempio creati su questo dispositivo.
+// Per i privati il database dà solo il nome: i partecipanti si vedono se qui la password è già stata inserita.
+function homeGroups(){
+  const mine = S.groups || [];
+  if (!S.all) return mine;
+  const known = new Map(mine.map(g=>[g.id,g])), ids = new Set(S.all.map(g=>g.id));
+  return S.all.map(g=>{ const k = known.get(g.id); return k && !g.members.length ? {...g, members:k.members} : g; })
+    .concat(mine.filter(g=>g.example && !ids.has(g.id)));
+}
+function loadAll(){
+  store.listAll().then(l=>{ if (l){ S.all = l; if (!S.gid) render(); } }).catch(()=>{});
+}
 function renderHome(){
-  const gs = [...S.groups].sort((a,b)=>(b.updatedAt||0)-(a.updatedAt||0));
+  const gs = homeGroups().sort((a,b)=>(b.updatedAt||0)-(a.updatedAt||0));
   if (!gs.length){
     return `<div class="empty"><span class="eyebrow">Nessun gruppo</span><h1>Un gruppo per ogni viaggio, casa o cena.</h1>
-      <p>Crea un gruppo, aggiungi chi partecipa e registra le spese. Pari calcola chi deve cosa e il modo più corto per chiudere i conti. Ogni gruppo ha un link segreto: chi lo riceve entra senza account.</p>
+      <p>Crea un gruppo, aggiungi chi partecipa e registra le spese. Pari calcola chi deve cosa e il modo più corto per chiudere i conti. I gruppi compaiono qui per tutti: mettici una password se vuoi che entri solo chi la conosce.</p>
       ${store.canWrite ? `<div class="row"><button class="btn primary" data-act="newGroup">Crea un gruppo</button><button class="btn" data-act="exampleGroup">Prova con un gruppo di esempio</button></div>` : ""}</div>${JOIN}`;
   }
-  return `<div class="row" style="justify-content:space-between"><h1>I tuoi gruppi</h1><div class="row" style="gap:6px"><button class="btn ghost" data-act="about">Cos'è Pari</button>${store.canWrite?`<button class="btn primary" data-act="newGroup">Nuovo gruppo</button>`:""}</div></div>
+  return `<div class="row" style="justify-content:space-between"><h1>Gruppi</h1><div class="row" style="gap:6px"><button class="btn ghost" data-act="about">Cos'è Pari</button>${store.canWrite?`<button class="btn primary" data-act="newGroup">Nuovo gruppo</button>`:""}</div></div>
   <div class="groups">${gs.map(g=>`<button class="gcard" data-act="open" data-id="${esc(g.id)}">
     <div class="row" style="justify-content:space-between;width:100%"><h3>${esc(g.name)}</h3>${g.example?`<span class="tag">Esempio</span>`:g.private?`<span class="tag">Privato</span>`:""}</div>
     <div class="avatars">${g.members.map(m=>avatar(g,m.id)).join("")}</div>
     <div class="muted" style="font-size:13px">${!g.members.length ? "Serve la password per entrare" : `${g.members.length} ${g.members.length===1?"persona":"persone"}${getMe(g.id)?` · tu sei ${esc(memberName(g,getMe(g.id)))}`:""}`}</div>
-  </button>`).join("")}</div>${JOIN}<p class="foot-note">L'elenco dei gruppi resta su questo dispositivo. Su un altro telefono riapri il link del gruppo.</p>`;
+  </button>`).join("")}</div>${JOIN}<p class="foot-note">Qui ci sono tutti i gruppi di Pari. Quelli privati chiedono la password per entrare.</p>`;
 }
 
 function renderGroup(g){
@@ -934,10 +949,10 @@ function groupSheet(existing){
   let confirmDel = false;
   const remote = store.mode==="remote", admin = !existing || isAdmin(existing);
   const pass = !remote ? ""
-    : !existing ? `<div class="field"><label for="g-pass">Password (facoltativa)</label><input class="inp" id="g-pass" type="password" autocomplete="new-password" placeholder="Lascia vuoto per entrare solo con il link">
-        <span class="muted" style="font-size:12.5px">Con la password, per entrare servono il link e la password. Potrai cambiarla solo tu.</span></div>`
+    : !existing ? `<div class="field"><label for="g-pass">Password (facoltativa)</label><input class="inp" id="g-pass" type="password" autocomplete="new-password" placeholder="Consigliata: senza, chiunque può entrare">
+        <span class="muted" style="font-size:12.5px">Il gruppo compare nella home di Pari per tutti. Con la password ne vedono solo il nome; per entrare serve la password. Potrai cambiarla solo tu.</span></div>`
     : admin ? `<div class="field"><span class="flabel">Password</span>
-        <p class="muted" style="margin:0;font-size:13px">${g.private?"Il gruppo è privato: per entrare servono il link e la password.":"Chi ha il link entra senza password. Aggiungine una per rendere il gruppo privato."}</p>
+        <p class="muted" style="margin:0;font-size:13px">${g.private?"Il gruppo è privato: nella home se ne vede solo il nome, per entrare serve la password.":"Il gruppo è visibile a tutti nella home di Pari e chiunque può entrare. Aggiungi una password per renderlo privato."}</p>
         <form class="row" id="g-pform" style="flex-wrap:nowrap" autocomplete="off"><input class="inp" id="g-pass" type="password" autocomplete="new-password" placeholder="${g.private?"Nuova password":"Scegli una password"}" style="flex:1" aria-label="Password del gruppo"><button class="btn" type="submit">${g.private?"Cambia":"Imposta"}</button></form>
         ${g.private?`<button class="btn ghost small" type="button" data-pclear style="align-self:flex-start">Togli la password</button>`:""}</div>`
     : g.private ? `<p class="muted" style="margin:0;font-size:13px">Gruppo privato. Solo chi l'ha creato può cambiare la password o eliminarlo.</p>` : "";
@@ -1034,16 +1049,12 @@ async function install(){
   render();
 }
 function iosInstallSheet(){
-  const g = S.gid && group();
   openSheet(`<div class="sh"><h2>Installa Pari</h2><button class="btn ghost iconbtn" data-x aria-label="Chiudi">✕</button></div>
     <ol class="steps"><li>Tocca <b>Condividi</b>, il quadrato con la freccia verso l'alto (in Safari è in basso o accanto all'indirizzo).</li>
       <li>Scorri e scegli <b>Aggiungi alla schermata Home</b>.</li>
       <li>Tocca <b>Aggiungi</b>. Pari compare tra le tue app.</li></ol>
-    <p class="muted" style="margin:0;font-size:13px">Su iPhone l'app installata non vede i gruppi aperti in Safari: la prima volta incolla il link del gruppo nella home dell'app.${g?" Copialo ora, così è pronto.":""}</p>
-    ${g ? `<div class="actions"><span></span><button class="btn primary" data-copy>Copia il link del gruppo</button></div>` : ""}`, r=>{
+    <p class="muted" style="margin:0;font-size:13px">Nell'app ritrovi tutti i gruppi. Per quelli privati la password va inserita di nuovo la prima volta.</p>`, r=>{
     r.querySelector("[data-x]").onclick = closeSheet;
-    const c = r.querySelector("[data-copy]");
-    if (c) c.onclick = async ()=>{ try { await navigator.clipboard.writeText(groupLink(g.id)); toast("Link copiato"); } catch(err){ toast(groupLink(g.id)); } };
   });
 }
 if ("serviceWorker" in navigator) window.addEventListener("load", ()=>{ navigator.serviceWorker.register("sw.js").catch(()=>{}); });
@@ -1067,7 +1078,9 @@ function openGroup(gid){
     if (status==="missing"){ S.missing = true; S.exps = []; render(); return; }
     if (status==="locked"){ S.locked = true; S.exps = null; closeSheet(); render(); return; }
     if (status==="error"){ if (!S.exps) { S.loadErr = true; render(); } return; }
+    const firstLoad = !S.exps;
     S.loadErr = false; S.exps = list; render();
+    if (firstLoad) passwordInvite();
   });
   render(); window.scrollTo(0,0);
 }
@@ -1075,7 +1088,19 @@ function goHome(){
   if (S.unsubE){ S.unsubE(); S.unsubE=null; }
   S.gid=null; S.exps=null;
   try { history.replaceState(null,"",location.pathname+location.search); } catch(e){}
-  render();
+  render(); loadAll();
+}
+// Al primo accesso a un gruppo aperto, chi può mettere la password viene invitato a farlo: il gruppo è visibile a tutti
+function passwordInvite(){
+  const g = group();
+  if (!g || g.private || g.example || store.mode!=="remote" || !isAdmin(g) || lsGet("pari.invite."+g.id) || $("#sheetRoot .sheet")) return;
+  lsSet("pari.invite."+g.id, "1");
+  openSheet(`<div class="sh"><h2>Questo gruppo è visibile a tutti</h2><button class="btn ghost iconbtn" data-x aria-label="Chiudi">✕</button></div>
+    <p class="muted" style="margin:0">Tutti i gruppi compaiono nella home di Pari e chiunque può entrare in quelli senza password, vedendo spese e partecipanti. Con una password se ne vede solo il nome.</p>
+    <div class="actions"><button class="btn" data-x>Più tardi</button><button class="btn primary" data-pass>Metti una password</button></div>`, r=>{
+    r.querySelectorAll("[data-x]").forEach(b=>b.onclick=closeSheet);
+    r.querySelector("[data-pass]").onclick = ()=>groupSheet(g);
+  });
 }
 
 /* ---------- events ---------- */
@@ -1156,6 +1181,8 @@ document.addEventListener("submit", async ev=>{
 /* ---------- boot ---------- */
 (async function boot(){
   await store.init();
+  loadAll();
+  document.addEventListener("visibilitychange", ()=>{ if (document.visibilityState==="visible" && !S.gid) loadAll(); });
   let first = true;
   store.watchGroups(list=>{
     S.groups = list;
@@ -1163,7 +1190,6 @@ document.addEventListener("submit", async ev=>{
       first = false;
       const h = (location.hash||"").slice(1);
       if (h && /^[A-Za-z0-9]{8,64}$/.test(h)) { openGroup(h); return; }
-      if (list.length===1){ openGroup(list[0].id); return; }
     }
     if (store.mode==="local" && S.gid && !list.some(g=>g.id===S.gid)) { goHome(); return; }
     render();

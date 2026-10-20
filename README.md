@@ -3,7 +3,7 @@
 Dividi le spese con gli amici. Niente account, niente limiti di spese al giorno.
 
 - **Pagina**: un solo file, `index.html`, pubblicato su GitHub Pages.
-- **Dati**: Supabase. Ogni gruppo ha un id segreto che sta nel link (`…/#id`). Chi ha il link legge e scrive quel gruppo. Chi non ce l'ha non vede niente: le tabelle non sono leggibili direttamente e tutto passa da funzioni che richiedono l'id.
+- **Dati**: Supabase. La home mostra tutti i gruppi. Ogni gruppo ha un id che sta nel link (`…/#id`); quelli senza password si aprono dalla home o dal link, quelli con password mostrano solo il nome finché non la inserisci. Le tabelle non sono leggibili direttamente: tutto passa da funzioni `pari_*`.
 
 ```
 index.html                                  l'app
@@ -16,6 +16,7 @@ sitemap.xml, llms.txt                       per Google e per le AI
 supabase/migrations/20261018000000_pari.sql schema, regole di accesso, funzioni
 supabase/migrations/20261019000000_password.sql password facoltativa e amministratore del gruppo
 supabase/migrations/20261020000000_author.sql   solo chi inserisce una spesa può modificarla
+supabase/migrations/20261020010000_public_list.sql elenco pubblico dei gruppi per la home
 supabase/zanego.local.sql                   ricrea "Zanego ott 26" (NON va su GitHub)
 ```
 
@@ -83,11 +84,11 @@ Per gli aggiornamenti successivi basta un commit e un push su `main`: Pages si r
 
 - **Pausa per inattività.** Sul piano gratuito Supabase mette in pausa un progetto dopo circa una settimana senza richieste. Si riattiva dalla dashboard con **Restore**, senza perdere dati.
 - **Aggiornamenti in tempo reale.** Dopo ogni modifica, la pagina avvisa le altre aperte sullo stesso gruppo tramite Supabase Realtime (broadcast). Se Realtime è spento, la pagina si aggiorna comunque ogni 20 secondi e quando torni sull'app.
-- **Chi ha il link entra nel gruppo** e può aggiungere spese e modificare nome e partecipanti. Mandalo solo a chi ne fa parte.
+- **Tutti i gruppi sono nella home, per chiunque apra Pari.** In un gruppo senza password chiunque entra e può aggiungere spese e modificare nome e partecipanti. Al primo accesso a un gruppo aperto, chi può impostare la password riceve l'invito a farlo. I gruppi di esempio non compaiono.
 - **Ogni spesa la modifica solo chi l'ha inserita.** Non ci sono account, quindi "chi" è il dispositivo: ognuno ha una chiave segreta in `localStorage` e la spesa ricorda l'hash della chiave di chi l'ha creata. Il controllo è nel database, non solo nella pagina. L'amministratore del gruppo può modificare ed eliminare tutte le spese, così niente resta bloccato se qualcuno cambia telefono. Le spese inserite prima di questa regola restano modificabili da tutti. Su iPhone l'app installata e Safari hanno chiavi diverse.
-- **Gruppi privati.** Chi crea un gruppo può aggiungere una password (alla creazione o da **Modifica**): per entrare servono link e password. La password è salvata cifrata (bcrypt); dopo 10 tentativi sbagliati il gruppo si blocca per 15 minuti. Protegge da un link finito in mani sbagliate, non dai membri, che la conoscono.
+- **Gruppi privati.** Chi crea un gruppo può aggiungere una password (alla creazione o da **Modifica**): nella home se ne vede solo il nome e per entrare serve la password. La password è salvata cifrata (bcrypt); dopo 10 tentativi sbagliati il gruppo si blocca per 15 minuti.
 - **Amministratore.** Il dispositivo di chi crea il gruppo riceve una chiave da amministratore (in `localStorage`). Solo con quella si cambia o toglie la password e si elimina il gruppo. Se si perde (cambio telefono, dati del browser cancellati), il gruppo resta usabile ma password ed eliminazione restano bloccate. I gruppi creati prima delle password non hanno amministratore: lo diventa chi imposta la password per primo.
-- **"I tuoi gruppi"** e la scelta "Tu sei" restano salvati sul dispositivo. Su un altro telefono basta riaprire il link.
+- **La scelta "Tu sei"**, le password già inserite e le chiavi (amministratore, autore delle spese) restano salvate sul dispositivo.
 - **Se qualcosa non si carica**, controlla in **Project Settings → Data API** che l'API sia attiva e che lo schema `public` sia esposto. Le funzioni `pari_*` passano da lì.
 
 ## App sul telefono
@@ -104,7 +105,8 @@ Pari è una PWA: si installa dal browser, senza store.
 
 | Funzione | Cosa fa |
 |---|---|
-| `pari_get(p_group, p_token)` | gruppo e spese (ognuna con `author`, l'hash di chi l'ha inserita); `null` se l'id non esiste, `{"locked": true}` se serve la password |
+| `pari_list()` | tutti i gruppi tranne quelli di esempio: id, nome, privato, partecipanti (vuoti per i privati) |
+| `pari_get(p_group, p_token)` | gruppo e spese (ognuna con `author`, l'hash di chi l'ha inserita); `null` se l'id non esiste, `{"locked": true, "name": …}` se serve la password |
 | `pari_unlock(p_group, p_pass)` | prova la password: `{token}` oppure `{error}` (`wrong_password`, `too_many_attempts`) |
 | `pari_save_group(p_group, p_name, p_members, p_example, p_token, p_admin)` | crea o aggiorna il gruppo (id di almeno 20 caratteri); alla creazione registra la chiave da amministratore |
 | `pari_set_password(p_group, p_token, p_admin, p_new)` | imposta, cambia o toglie (`p_new` vuota) la password; solo l'amministratore; restituisce il nuovo token |
