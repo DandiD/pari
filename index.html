@@ -302,6 +302,9 @@ img{max-width:100%}
 [hidden]{display:none!important}
 .joinrow{display:flex;gap:8px;flex-wrap:wrap}
 .joinrow .inp{flex:1;min-width:200px}
+.pw{position:relative;display:flex;flex:1;min-width:200px}
+.pw .inp{flex:1;width:100%;min-width:0;padding-right:92px}
+.pw-eye{position:absolute;right:6px;top:50%;transform:translateY(-50%);border:0;background:transparent;color:var(--accent);font:inherit;font-size:13px;font-weight:600;padding:6px 10px;border-radius:8px;cursor:pointer}
 @media (max-width:899px){ .toast{bottom:calc(84px + env(safe-area-inset-bottom, 0px))} }
 .foot-note{font-size:12.5px;color:var(--muted);text-align:center;padding-top:8px}
 .about p{margin:0 0 10px}
@@ -464,6 +467,7 @@ async function authorHashOf(gid){
 }
 // Spese senza autore (inserite prima di questa regola o in anteprima): le modificano tutti
 const canEditExp = (g, e) => e.mine!==false || (g.hasAdmin && !!adminOf(g.id));
+const pwInput = attrs => `<span class="pw"><input class="inp" type="text" autocapitalize="off" autocorrect="off" spellcheck="false" ${attrs}><button type="button" class="pw-eye" data-peek aria-label="Nascondi la password">Nascondi</button></span>`;
 function secureId(n=24){
   const a = "ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789", b = new Uint8Array(n);
   crypto.getRandomValues(b); return Array.from(b, x=>a[x % a.length]).join("");
@@ -636,7 +640,7 @@ function render(){
   if (S.gid && S.locked){
     app.innerHTML = top + `<form class="empty" id="unlockForm" autocomplete="off"><span class="eyebrow">Gruppo privato${(()=>{ const k = knownGroups().find(x=>x.id===S.gid); return k ? ` · ${esc(k.name)}` : ""; })()}</span><h1>Serve la password.</h1>
       <p>Chi ha creato questo gruppo l'ha protetto con una password. Chiedila a chi ti ha mandato il link.</p>
-      <div class="joinrow" style="width:100%"><input class="inp" id="unlockIn" type="password" placeholder="Password del gruppo" aria-label="Password del gruppo"><button class="btn primary" type="submit">Entra</button></div>
+      <div class="joinrow" style="width:100%">${pwInput(`id="unlockIn" placeholder="Password del gruppo" aria-label="Password del gruppo"`)}<button class="btn primary" type="submit">Entra</button></div>
       <div class="status bad" id="unlockErr" hidden></div>
       <button class="btn ghost small" type="button" data-act="home">Vai ai tuoi gruppi</button></form>`;
     setTimeout(()=>{ const i=$("#unlockIn"); if (i) i.focus(); }, 30);
@@ -949,11 +953,11 @@ function groupSheet(existing){
   let confirmDel = false;
   const remote = store.mode==="remote", admin = !existing || isAdmin(existing);
   const pass = !remote ? ""
-    : !existing ? `<div class="field"><label for="g-pass">Password (facoltativa)</label><input class="inp" id="g-pass" type="password" autocomplete="new-password" placeholder="Consigliata: senza, chiunque può entrare">
+    : !existing ? `<div class="field"><label for="g-pass">Password (facoltativa)</label>${pwInput(`id="g-pass" autocomplete="new-password" placeholder="Consigliata: senza, chiunque può entrare"`)}
         <span class="muted" style="font-size:12.5px">Il gruppo compare nella home di Pari per tutti. Con la password ne vedono solo il nome; per entrare serve la password. Potrai cambiarla solo tu.</span></div>`
     : admin ? `<div class="field"><span class="flabel">Password</span>
         <p class="muted" style="margin:0;font-size:13px">${g.private?"Il gruppo è privato: nella home se ne vede solo il nome, per entrare serve la password.":"Il gruppo è visibile a tutti nella home di Pari e chiunque può entrare. Aggiungi una password per renderlo privato."}</p>
-        <form class="row" id="g-pform" style="flex-wrap:nowrap" autocomplete="off"><input class="inp" id="g-pass" type="password" autocomplete="new-password" placeholder="${g.private?"Nuova password":"Scegli una password"}" style="flex:1" aria-label="Password del gruppo"><button class="btn" type="submit">${g.private?"Cambia":"Imposta"}</button></form>
+        <form class="row" id="g-pform" style="flex-wrap:nowrap" autocomplete="off">${pwInput(`id="g-pass" autocomplete="new-password" placeholder="${g.private?"Nuova password":"Scegli una password"}" aria-label="Password del gruppo"`)}<button class="btn" type="submit">${g.private?"Cambia":"Imposta"}</button></form>
         ${g.private?`<button class="btn ghost small" type="button" data-pclear style="align-self:flex-start">Togli la password</button>`:""}</div>`
     : g.private ? `<p class="muted" style="margin:0;font-size:13px">Gruppo privato. Solo chi l'ha creato può cambiare la password o eliminarlo.</p>` : "";
   const html = `<div class="sh"><h2>${existing?"Modifica gruppo":"Nuovo gruppo"}</h2><button class="btn ghost iconbtn" data-x aria-label="Chiudi">✕</button></div>
@@ -1104,6 +1108,13 @@ function passwordInvite(){
 }
 
 /* ---------- events ---------- */
+// Le password si vedono mentre le scrivi; "Nascondi" le maschera
+document.addEventListener("click", ev=>{
+  const b = ev.target.closest("[data-peek]"); if (!b) return;
+  const i = b.previousElementSibling, hide = i.type!=="password";
+  i.type = hide ? "password" : "text"; b.textContent = hide ? "Mostra" : "Nascondi";
+  b.setAttribute("aria-label", hide ? "Mostra la password" : "Nascondi la password"); i.focus();
+});
 document.addEventListener("click", async ev=>{
   const t = ev.target.closest("[data-act]"); if (!t || t.closest("#sheetRoot")) return;
   const g = group(), act = t.dataset.act;
