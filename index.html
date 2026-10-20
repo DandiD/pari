@@ -1028,9 +1028,8 @@ function groupSheet(existing){
 function groupLink(gid){ return location.origin + location.pathname + "#" + gid; }
 // Link da amministratore: porta la chiave su un altro dispositivo (cambio telefono, dati cancellati, app installata)
 const adminLink = gid => groupLink(gid) + "&admin=" + adminOf(gid);
-const ADMIN_WHY = g => `Se cambi telefono o cancelli i dati del browser, aprilo per tornare amministratore${g.private?" ed entrare senza password":""}. Salvalo nelle note o mandalo a te stesso. Non darlo agli altri: chi lo apre può cambiare la password ed eliminare il gruppo.`;
 const adminLinkField = g => `<div class="field"><span class="flabel">Link da amministratore</span>
-  <p class="muted" style="margin:0;font-size:13px">${ADMIN_WHY(g)}</p>
+  <p class="muted" style="margin:0;font-size:13px">È la tua chiave personale di questo gruppo, diversa dal link che mandi agli amici. Se cambi telefono, cancelli i dati del browser o apri Pari da un altro dispositivo, aprilo lì e torni amministratore${g.private?", entrando anche senza password":""}. Tienilo per te: chi lo apre può cambiare la password ed eliminare il gruppo.</p>
   <button class="btn small" type="button" data-adminlink style="align-self:flex-start">${navigator.share?"Salva il link":"Copia il link"}</button></div>`;
 async function shareAdminLink(g){
   const url = adminLink(g.id);
@@ -1043,7 +1042,13 @@ async function shareAdminLink(g){
 }
 function adminLinkSheet(g){
   openSheet(`<div class="sh"><h2>Salva il link da amministratore</h2><button class="btn ghost iconbtn" data-x aria-label="Chiudi">✕</button></div>
-    <p class="muted" style="margin:0">Il gruppo è tuo: solo questo dispositivo può cambiare la password ed eliminarlo. ${ADMIN_WHY(g)}</p>
+    <p style="margin:0">Hai creato il gruppo, quindi sei l'amministratore: solo tu puoi cambiare la password ed eliminarlo. Pari non ha account e ti riconosce solo da questo ${IOS||/Android/i.test(navigator.userAgent)?"telefono":"browser"}.</p>
+    <ul class="steps">
+      <li><b>Cos'è.</b> Un link personale, diverso da quello per invitare gli amici. È la tua chiave del gruppo.</li>
+      <li><b>Quando serve.</b> Se cambi telefono, cancelli i dati del browser o usi Pari da un altro dispositivo: lo apri lì e torni amministratore${g.private?", entrando anche senza password":""}.</li>
+      <li><b>Dove tenerlo.</b> Nelle note, nei messaggi salvati o in una mail a te stesso.</li>
+      <li><b>Non mandarlo a nessuno.</b> Chi lo apre diventa amministratore come te. Per invitare gli amici usa <b>Invita</b>.</li>
+    </ul>
     <div class="actions"><button class="btn" data-x>Più tardi</button><button class="btn primary" data-adminlink>${navigator.share?"Salva il link":"Copia il link"}</button></div>`, r=>{
     r.querySelectorAll("[data-x]").forEach(b=>b.onclick=closeSheet);
     r.querySelector("[data-adminlink]").onclick = async ()=>{ await shareAdminLink(g); closeSheet(); };
