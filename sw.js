@@ -1,9 +1,10 @@
 // Service worker di Pari: rende l'app installabile e la apre anche senza rete.
-// Pagine: prima la rete, così gli aggiornamenti arrivano subito; la copia in cache serve solo offline.
+// Pagine: prima la rete, saltando la cache HTTP (GitHub Pages la tiene 10 minuti), così gli aggiornamenti
+// arrivano subito; la copia in cache serve solo offline.
 // Font, script e icone: dalla cache, aggiornati in background.
 // Le chiamate a Supabase (altro dominio) non passano da qui.
 // Quando cambia la lista dei file, aumenta VERSION.
-const VERSION = "pari-v2";
+const VERSION = "pari-v3";
 const SHELL = [
   "./",
   "index.html",
@@ -29,7 +30,7 @@ const SHELL = [
 ];
 
 self.addEventListener("install", e => {
-  e.waitUntil(caches.open(VERSION).then(c => c.addAll(SHELL)).then(() => self.skipWaiting()));
+  e.waitUntil(caches.open(VERSION).then(c => c.addAll(SHELL.map(u => new Request(u, {cache: "reload"})))).then(() => self.skipWaiting()));
 });
 
 self.addEventListener("activate", e => {
@@ -43,7 +44,7 @@ self.addEventListener("fetch", e => {
   if (req.method !== "GET" || new URL(req.url).origin !== location.origin) return;
 
   if (req.mode === "navigate"){
-    e.respondWith(fetch(req).then(res => {
+    e.respondWith(fetch(req, {cache: "no-cache"}).then(res => {
       if (res.ok){ const copy = res.clone(); caches.open(VERSION).then(c => c.put(req, copy)); }
       return res;
     }).catch(() => caches.match(req, {ignoreSearch: true}).then(r => r || caches.match("index.html"))));
