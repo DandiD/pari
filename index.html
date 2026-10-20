@@ -1090,10 +1090,10 @@ function goHome(){
   try { history.replaceState(null,"",location.pathname+location.search); } catch(e){}
   render(); loadAll();
 }
-// Al primo accesso a un gruppo aperto, chi può mettere la password viene invitato a farlo: il gruppo è visibile a tutti
+// Al primo accesso a un gruppo aperto, chi l'ha creato (ha la chiave da amministratore) viene invitato a mettere la password
 function passwordInvite(){
   const g = group();
-  if (!g || g.private || g.example || store.mode!=="remote" || !isAdmin(g) || lsGet("pari.invite."+g.id) || $("#sheetRoot .sheet")) return;
+  if (!g || g.private || g.example || store.mode!=="remote" || !adminOf(g.id) || lsGet("pari.invite."+g.id) || $("#sheetRoot .sheet")) return;
   lsSet("pari.invite."+g.id, "1");
   openSheet(`<div class="sh"><h2>Questo gruppo è visibile a tutti</h2><button class="btn ghost iconbtn" data-x aria-label="Chiudi">✕</button></div>
     <p class="muted" style="margin:0">Tutti i gruppi compaiono nella home di Pari e chiunque può entrare in quelli senza password, vedendo spese e partecipanti. Con una password se ne vede solo il nome.</p>
