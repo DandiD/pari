@@ -451,6 +451,18 @@ function forgetGroup(gid){ lsSet(KNOWN, JSON.stringify(knownGroups().filter(x=>x
 const tokenOf = gid => lsGet("pari.tok."+gid);
 const adminOf = gid => lsGet("pari.adm."+gid);
 const isAdmin = g => !g.hasAdmin || !!adminOf(g.id);
+// Chiave del dispositivo: firma le spese che inserisci, solo con questa (o da amministratore) si modificano.
+function deviceKey(){ let k = lsGet("pari.key"); if (!k){ k = secureId(32); lsSet("pari.key", k); } return k; }
+const authorHashes = {};
+async function authorHashOf(gid){
+  if (!authorHashes[gid]){
+    const d = await crypto.subtle.digest("SHA-256", new TextEncoder().encode(gid + ":" + deviceKey()));
+    authorHashes[gid] = Array.from(new Uint8Array(d), b=>b.toString(16).padStart(2,"0")).join("");
+  }
+  return authorHashes[gid];
+}
+// Spese senza autore (inserite prima di questa regola o in anteprima): le modificano tutti
+const canEditExp = (g, e) => e.mine!==false || (g.hasAdmin && !!adminOf(g.id));
 function secureId(n=24){
   const a = "ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789", b = new Uint8Array(n);
   crypto.getRandomValues(b); return Array.from(b, x=>a[x % a.length]).join("");
@@ -485,8 +497,10 @@ const store = {
         if (!alive || my!==seq) return;
         if (!d){ cb(null, "missing"); return; }
         if (d.locked){ lsSet("pari.tok."+gid, null); cb(null, "locked"); return; }
+        const mine = await authorHashOf(gid);
+        if (!alive || my!==seq) return;
         this.full[gid] = d.group; rememberGroup(d.group); this.notifyGroups();
-        cb(d.expenses || []);
+        cb((d.expenses || []).map(({author, ...e})=>({...e, mine: !author || author===mine})));
       } catch(err){ if (alive && my===seq) cb(undefined, "error"); }
     };
     this.reload = load;
@@ -524,12 +538,12 @@ const store = {
     delete this.memG[gid]; delete this.memE[gid]; this.notifyGroups();
   },
   async saveExpense(gid, e){
-    const { id, ...body } = e;
-    if (this.mode==="remote"){ await this.rpc("pari_save_expense", { p_group:gid, p_id:id, p_body:body, p_token:tokenOf(gid) }); await this.changed(); return; }
+    const { id, mine, ...body } = e;
+    if (this.mode==="remote"){ await this.rpc("pari_save_expense", { p_group:gid, p_id:id, p_body:body, p_token:tokenOf(gid), p_author:deviceKey(), p_admin:adminOf(gid) }); await this.changed(); return; }
     (this.memE[gid] = this.memE[gid]||{})[id] = { id, ...body }; (this.eL[gid]||[]).forEach(f=>f());
   },
   async deleteExpense(gid, eid){
-    if (this.mode==="remote"){ await this.rpc("pari_delete_expense", { p_group:gid, p_id:eid, p_token:tokenOf(gid) }); await this.changed(); return; }
+    if (this.mode==="remote"){ await this.rpc("pari_delete_expense", { p_group:gid, p_id:eid, p_token:tokenOf(gid), p_author:deviceKey(), p_admin:adminOf(gid) }); await this.changed(); return; }
     delete (this.memE[gid]||{})[eid]; (this.eL[gid]||[]).forEach(f=>f());
   },
   // {token} se la password è giusta, altrimenti {error}
@@ -591,6 +605,7 @@ function handleWriteError(err, fallback){
   if (/group_full/.test(m)){ toast("Il gruppo ha troppe spese: eliminane qualcuna vecchia."); return true; }
   if (/locked/.test(m)){ toast("La password del gruppo è cambiata: inseriscila di nuovo."); lsSet("pari.tok."+S.gid, null); closeSheet(); if (S.gid) openGroup(S.gid); return true; }
   if (/not_admin/.test(m)){ toast("Solo chi ha creato il gruppo può farlo."); return true; }
+  if (/not_author/.test(m)){ toast("Solo chi ha inserito la spesa può modificarla o eliminarla."); return true; }
   if (fallback) toast(navigator.onLine===false ? "Sei offline: riprova quando torna la connessione." : fallback);
   return false;
 }
@@ -811,6 +826,8 @@ function expenseSheet(g, existing, prefill){
     parts:Object.fromEntries(g.members.map(m=>[m.id,1])), createdAt:Date.now(), addedBy: me || null
   };
   const isSettle = e.kind==="settle";
+  const editable = !existing || canEditExp(g, existing);
+  const lockNote = editable ? "" : `<p class="status">${isSettle?"Questo pagamento lo può":"Questa spesa la può"} modificare o eliminare solo chi l'ha ${isSettle?"inserito":"inserita"}${e.addedBy && memberName(g,e.addedBy) ? `: ${esc(memberName(g,e.addedBy))}` : ""}.</p>`;
   // working values per mode
   const W = { equal:{}, exact:{}, percent:{}, shares:{} };
   g.members.forEach(m=>{ W.equal[m.id]=1; W.exact[m.id]=""; W.percent[m.id]=""; W.shares[m.id]="1"; });
@@ -823,7 +840,7 @@ function expenseSheet(g, existing, prefill){
   let mode = e.mode, confirmDel = false;
   const settleTo = isSettle ? Object.keys(e.parts)[0] : null;
 
-  const html = `<div class="sh"><h2>${isSettle?"Pagamento":existing?"Modifica spesa":"Nuova spesa"}</h2><button class="btn ghost iconbtn" data-x aria-label="Chiudi">✕</button></div>
+  const html = `<div class="sh"><h2>${isSettle?"Pagamento":!editable?"Spesa":existing?"Modifica spesa":"Nuova spesa"}</h2><button class="btn ghost iconbtn" data-x aria-label="Chiudi">✕</button></div>
     ${isSettle ? `<p class="muted" style="margin:0">${esc(memberName(g,e.payer))} ha dato <span class="num">${money(e.amount)}</span> a ${esc(memberName(g,settleTo))} il ${esc(e.date)}.</p>` : `
     <div class="field"><label for="f-title">Descrizione</label><input class="inp" id="f-title" value="${esc(e.title)}" placeholder="Es. Cena in trattoria"></div>
     <div class="grid2"><div class="field"><label for="f-amount">Importo</label><input class="inp amount" id="f-amount" inputmode="decimal" value="${e.amount?centsToInput(e.amount):""}" placeholder="0,00"></div>
@@ -832,9 +849,10 @@ function expenseSheet(g, existing, prefill){
       <div class="field"><label for="f-cat">Categoria</label><select class="inp" id="f-cat">${CATS.map(c=>`<option value="${c.k}"${c.k===e.cat?" selected":""}>${c.l}</option>`).join("")}</select></div></div>
     <div class="field"><span class="flabel">Come dividere</span><div class="seg" id="f-mode">${[["equal","Uguale"],["exact","Importi"],["percent","Percentuali"],["shares","Quote"]].map(([k,l])=>`<button type="button" data-mode="${k}" aria-pressed="${k===mode}">${l}</button>`).join("")}</div></div>
     <div class="split" id="f-split"></div>
-    <div class="status" id="f-status"></div>`}
-    <div class="actions">${existing?`<button class="btn danger" data-del>Elimina</button>`:"<span></span>"}
-      <div class="row">${isSettle?"":`<button class="btn" data-x>Annulla</button><button class="btn primary" data-save>${existing?"Salva":"Aggiungi spesa"}</button>`}</div></div>`;
+    <div class="status" id="f-status"${editable?"":" hidden"}></div>`}
+    ${lockNote}
+    <div class="actions">${existing && editable?`<button class="btn danger" data-del>Elimina</button>`:"<span></span>"}
+      <div class="row">${!editable?`<button class="btn" data-x>Chiudi</button>`:isSettle?"":`<button class="btn" data-x>Annulla</button><button class="btn primary" data-save>${existing?"Salva":"Aggiungi spesa"}</button>`}</div></div>`;
 
   openSheet(html, root=>{
     root.querySelectorAll("[data-x]").forEach(b=>b.onclick=closeSheet);
@@ -843,7 +861,7 @@ function expenseSheet(g, existing, prefill){
       if (!confirmDel){ confirmDel=true; delBtn.textContent="Conferma eliminazione"; return; }
       const snapshot = existing; closeSheet();
       try { await store.deleteExpense(g.id, existing.id); toast(isSettle?"Pagamento eliminato":"Spesa eliminata", ()=>store.saveExpense(g.id, snapshot)); }
-      catch(err){ toast("Non è stato possibile eliminare. Riprova."); }
+      catch(err){ handleWriteError(err, "Non è stato possibile eliminare. Riprova."); }
     };
     if (isSettle) return;
     const amtEl = $("#f-amount",root), split = $("#f-split",root), status = $("#f-status",root), save = root.querySelector("[data-save]");
@@ -883,13 +901,14 @@ function expenseSheet(g, existing, prefill){
       g.members.forEach(m=>{ const el = split.querySelector(`[data-res="${CSS.escape(m.id)}"]`); if (el) el.textContent = r.sh[m.id] ? money(r.sh[m.id]) : "—"; });
       status.className = "status" + (r.ok ? " ok" : (r.msg && curAmt()>0 ? " bad":""));
       status.textContent = r.ok ? (mode==="equal" ? `${Object.keys(r.parts).length} ${Object.keys(r.parts).length===1?"persona":"persone"}, ${money(Math.floor(r.amount/Object.keys(r.parts).length))} a testa circa.` : r.msg) : r.msg;
-      save.disabled = !(r.ok && $("#f-title",root).value.trim());
+      if (save) save.disabled = !(r.ok && $("#f-title",root).value.trim());
     }
     root.querySelectorAll("#f-mode button").forEach(b=>b.onclick=()=>{ mode=b.dataset.mode; root.querySelectorAll("#f-mode button").forEach(x=>x.setAttribute("aria-pressed", x===b)); drawSplit(); });
     amtEl.addEventListener("input", refresh); $("#f-title",root).addEventListener("input", refresh);
     $("#f-title",root).addEventListener("blur", ()=>{ // guess category from title when still "altro"
       const sel=$("#f-cat",root); if (sel.value==="altro"){ const w=$("#f-title",root).value.toLowerCase().split(/\s+/); const c=CATS.find(c=>c.w.some(x=>w.includes(x))); if(c) sel.value=c.k; } });
     drawSplit();
+    if (!editable){ root.querySelectorAll("input, select, #f-mode button").forEach(x=>x.disabled=true); return; }
     if (!existing) setTimeout(()=>{ (prefill&&prefill.title ? amtEl : $("#f-title",root)).focus(); }, 30);
     save.onclick = async ()=>{
       const r = compute(); if (!r.ok) return;

@@ -15,6 +15,7 @@ sw.js                                       service worker: app installabile e a
 sitemap.xml, llms.txt                       per Google e per le AI
 supabase/migrations/20261018000000_pari.sql schema, regole di accesso, funzioni
 supabase/migrations/20261019000000_password.sql password facoltativa e amministratore del gruppo
+supabase/migrations/20261020000000_author.sql   solo chi inserisce una spesa può modificarla
 supabase/zanego.local.sql                   ricrea "Zanego ott 26" (NON va su GitHub)
 ```
 
@@ -82,7 +83,8 @@ Per gli aggiornamenti successivi basta un commit e un push su `main`: Pages si r
 
 - **Pausa per inattività.** Sul piano gratuito Supabase mette in pausa un progetto dopo circa una settimana senza richieste. Si riattiva dalla dashboard con **Restore**, senza perdere dati.
 - **Aggiornamenti in tempo reale.** Dopo ogni modifica, la pagina avvisa le altre aperte sullo stesso gruppo tramite Supabase Realtime (broadcast). Se Realtime è spento, la pagina si aggiorna comunque ogni 20 secondi e quando torni sull'app.
-- **Chi ha il link può modificare tutto il gruppo**, comprese le spese degli altri. È lo stesso modello dei link di invito di Splitwise. Mandalo solo a chi ne fa parte.
+- **Chi ha il link entra nel gruppo** e può aggiungere spese e modificare nome e partecipanti. Mandalo solo a chi ne fa parte.
+- **Ogni spesa la modifica solo chi l'ha inserita.** Non ci sono account, quindi "chi" è il dispositivo: ognuno ha una chiave segreta in `localStorage` e la spesa ricorda l'hash della chiave di chi l'ha creata. Il controllo è nel database, non solo nella pagina. L'amministratore del gruppo può modificare ed eliminare tutte le spese, così niente resta bloccato se qualcuno cambia telefono. Le spese inserite prima di questa regola restano modificabili da tutti. Su iPhone l'app installata e Safari hanno chiavi diverse.
 - **Gruppi privati.** Chi crea un gruppo può aggiungere una password (alla creazione o da **Modifica**): per entrare servono link e password. La password è salvata cifrata (bcrypt); dopo 10 tentativi sbagliati il gruppo si blocca per 15 minuti. Protegge da un link finito in mani sbagliate, non dai membri, che la conoscono.
 - **Amministratore.** Il dispositivo di chi crea il gruppo riceve una chiave da amministratore (in `localStorage`). Solo con quella si cambia o toglie la password e si elimina il gruppo. Se si perde (cambio telefono, dati del browser cancellati), il gruppo resta usabile ma password ed eliminazione restano bloccate. I gruppi creati prima delle password non hanno amministratore: lo diventa chi imposta la password per primo.
 - **"I tuoi gruppi"** e la scelta "Tu sei" restano salvati sul dispositivo. Su un altro telefono basta riaprire il link.
@@ -102,12 +104,12 @@ Pari è una PWA: si installa dal browser, senza store.
 
 | Funzione | Cosa fa |
 |---|---|
-| `pari_get(p_group, p_token)` | gruppo e spese; `null` se l'id non esiste, `{"locked": true}` se serve la password |
+| `pari_get(p_group, p_token)` | gruppo e spese (ognuna con `author`, l'hash di chi l'ha inserita); `null` se l'id non esiste, `{"locked": true}` se serve la password |
 | `pari_unlock(p_group, p_pass)` | prova la password: `{token}` oppure `{error}` (`wrong_password`, `too_many_attempts`) |
 | `pari_save_group(p_group, p_name, p_members, p_example, p_token, p_admin)` | crea o aggiorna il gruppo (id di almeno 20 caratteri); alla creazione registra la chiave da amministratore |
 | `pari_set_password(p_group, p_token, p_admin, p_new)` | imposta, cambia o toglie (`p_new` vuota) la password; solo l'amministratore; restituisce il nuovo token |
-| `pari_save_expense(p_group, p_id, p_body, p_token)` | crea o aggiorna una spesa: importo in centesimi interi, massimo 3000 spese per gruppo |
-| `pari_delete_expense(p_group, p_id, p_token)` | elimina una spesa |
+| `pari_save_expense(p_group, p_id, p_body, p_token, p_author, p_admin)` | crea o aggiorna una spesa: importo in centesimi interi, massimo 3000 spese per gruppo; per modificarla serve la chiave di chi l'ha creata o quella da amministratore |
+| `pari_delete_expense(p_group, p_id, p_token, p_author, p_admin)` | elimina una spesa, con le stesse regole della modifica |
 | `pari_delete_group(p_group, p_token, p_admin)` | elimina il gruppo e tutte le sue spese; se il gruppo ha un amministratore, serve la sua chiave |
 
 `p_token` serve solo per i gruppi con password: è derivato dalla password e smette di valere quando la password cambia.
