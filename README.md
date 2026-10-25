@@ -18,6 +18,7 @@ supabase/migrations/20261019000000_password.sql password facoltativa e amministr
 supabase/migrations/20261020000000_author.sql   solo chi inserisce una spesa può modificarla
 supabase/migrations/20261020010000_public_list.sql elenco pubblico dei gruppi per la home
 supabase/migrations/20261020020000_admin_link.sql  link da amministratore
+supabase/migrations/20261025000000_member_count.sql numero di partecipanti visibile anche per i gruppi privati
 supabase/zanego.local.sql                   ricrea "Zanego ott 26" (NON va su GitHub)
 ```
 
@@ -107,7 +108,7 @@ Pari è una PWA: si installa dal browser, senza store.
 
 | Funzione | Cosa fa |
 |---|---|
-| `pari_list()` | tutti i gruppi tranne quelli di esempio: id, nome, privato, partecipanti (vuoti per i privati) |
+| `pari_list()` | tutti i gruppi tranne quelli di esempio: id, nome, privato, numero di partecipanti e partecipanti (vuoti per i privati) |
 | `pari_get(p_group, p_token)` | gruppo e spese (ognuna con `author`, l'hash di chi l'ha inserita); `null` se l'id non esiste, `{"locked": true, "name": …}` se serve la password |
 | `pari_unlock(p_group, p_pass)` | prova la password: `{token}` oppure `{error}` (`wrong_password`, `too_many_attempts`) |
 | `pari_save_group(p_group, p_name, p_members, p_example, p_token, p_admin)` | crea o aggiorna il gruppo (id di almeno 20 caratteri); alla creazione registra la chiave da amministratore |

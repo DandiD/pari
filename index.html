@@ -690,7 +690,9 @@ function renderHome(){
   <div class="groups">${gs.map(g=>`<button class="gcard" data-act="open" data-id="${esc(g.id)}">
     <div class="row" style="justify-content:space-between;width:100%"><h3>${esc(g.name)}</h3>${g.example?`<span class="tag">Esempio</span>`:g.private?`<span class="tag">Privato</span>`:""}</div>
     <div class="avatars">${g.members.map(m=>avatar(g,m.id)).join("")}</div>
-    <div class="muted" style="font-size:13px">${!g.members.length ? "Serve la password per entrare" : `${g.members.length} ${g.members.length===1?"persona":"persone"}${getMe(g.id)?` · tu sei ${esc(memberName(g,getMe(g.id)))}`:""}`}</div>
+    <div class="muted" style="font-size:13px">${(()=>{ const n = g.members.length || g.memberCount || 0, who = n ? `${n} ${n===1?"persona":"persone"}` : "";
+      if (!g.members.length) return who ? `${who} · serve la password` : "Serve la password per entrare";
+      return who + (getMe(g.id) ? ` · tu sei ${esc(memberName(g,getMe(g.id)))}` : ""); })()}</div>
   </button>`).join("")}</div>${JOIN}<p class="foot-note">Qui ci sono tutti i gruppi di Pari. Quelli privati chiedono la password per entrare.</p>`;
 }
 
