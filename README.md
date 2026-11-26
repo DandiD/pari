@@ -19,6 +19,7 @@ supabase/migrations/20261020000000_author.sql   solo chi inserisce una spesa pu�
 supabase/migrations/20261020010000_public_list.sql elenco pubblico dei gruppi per la home
 supabase/migrations/20261020020000_admin_link.sql  link da amministratore
 supabase/migrations/20261025000000_member_count.sql numero di partecipanti visibile anche per i gruppi privati
+supabase/migrations/20261126000000_received.sql   quote ricevute nella scheda di ogni spesa
 supabase/zanego.local.sql                   ricrea "Zanego ott 26" (NON va su GitHub)
 ```
 
@@ -113,8 +114,9 @@ Pari è una PWA: si installa dal browser, senza store.
 | `pari_unlock(p_group, p_pass)` | prova la password: `{token}` oppure `{error}` (`wrong_password`, `too_many_attempts`) |
 | `pari_save_group(p_group, p_name, p_members, p_example, p_token, p_admin)` | crea o aggiorna il gruppo (id di almeno 20 caratteri); alla creazione registra la chiave da amministratore |
 | `pari_set_password(p_group, p_token, p_admin, p_new)` | imposta, cambia o toglie (`p_new` vuota) la password; solo l'amministratore; restituisce il nuovo token |
-| `pari_save_expense(p_group, p_id, p_body, p_token, p_author, p_admin)` | crea o aggiorna una spesa: importo in centesimi interi, massimo 3000 spese per gruppo; per modificarla serve la chiave di chi l'ha creata o quella da amministratore |
+| `pari_save_expense(p_group, p_id, p_body, p_token, p_author, p_admin)` | crea o aggiorna una spesa: importo in centesimi interi, massimo 3000 spese per gruppo; per modificarla serve la chiave di chi l'ha creata o quella da amministratore; quando la modifica, tiene le quote già segnate come ricevute |
 | `pari_delete_expense(p_group, p_id, p_token, p_author, p_admin)` | elimina una spesa, con le stesse regole della modifica |
+| `pari_mark_received(p_group, p_id, p_member, p_amount, p_token)` | segna la quota di `p_member` come ridata a chi ha pagato la spesa (`p_amount` in centesimi) o la toglie (`p_amount` null); cambia solo `got` nel corpo della spesa. Chi può segnarla (chi ha pagato o l'amministratore) lo decide la pagina |
 | `pari_claim_admin(p_group, p_admin)` | `{ok: true, token}` se la chiave da amministratore è giusta (token solo per i gruppi privati), altrimenti `{ok: false}` |
 | `pari_delete_group(p_group, p_token, p_admin)` | elimina il gruppo e tutte le sue spese; se il gruppo ha un amministratore, serve la sua chiave |
 

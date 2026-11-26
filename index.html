@@ -275,6 +275,27 @@ textarea.inp{resize:vertical;font-size:14px;line-height:1.45}
 .split{display:flex;flex-direction:column;border:1px solid var(--line);border-radius:12px;overflow:hidden}
 .srow{display:grid;grid-template-columns:auto minmax(0,1fr) 96px 84px;gap:10px;align-items:center;padding:8px 12px}
 .srow + .srow{border-top:1px solid var(--line)}
+.rcv{display:flex;flex-direction:column;gap:10px;padding:14px;border:1px solid var(--line);border-radius:14px;background:var(--bg)}
+.rcv[hidden]{display:none}
+.rhead{display:flex;justify-content:space-between;align-items:baseline;gap:10px;font-size:14.5px}
+.rbar{height:6px;border-radius:99px;background:var(--sunken);overflow:hidden}
+.rbar b{display:block;height:100%;background:var(--pos);border-radius:99px}
+.rsum{display:flex;justify-content:space-between;font-size:12.5px}
+.rcv .pos{color:var(--pos)} .rcv .neg{color:var(--neg)}
+.rlist{display:flex;flex-direction:column;border:1px solid var(--line);border-radius:12px;overflow:hidden;background:var(--surface)}
+.rrow{display:grid;grid-template-columns:auto minmax(0,1fr) auto 104px;gap:10px;align-items:center;padding:8px 12px;min-height:56px}
+.rrow + .rrow{border-top:1px solid var(--line)}
+.rrow .nm{font-weight:500;display:flex;flex-direction:column;min-width:0;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+.rrow .nm small{font-weight:400;font-size:12px;color:var(--muted);white-space:normal}
+.rrow .nm small.pos{color:var(--pos)}
+.rrow .num{font-size:13.5px} .rrow .num.off{color:var(--muted)}
+.rbtn{min-height:44px;width:100%}
+.rbtn.on{background:var(--pos-soft);border-color:var(--pos-soft);color:var(--pos);font-weight:600}
+.rstat{font-size:13px;text-align:right}
+.rnote{margin:0;font-size:13px}
+.rprog{display:flex;align-items:center;gap:8px;font-size:12px;color:var(--muted);margin-top:4px}
+.rprog i{width:56px;height:4px;border-radius:99px;background:var(--sunken);overflow:hidden;display:block}
+.rprog b{display:block;height:100%;background:var(--pos)}
 .srow .nm{font-weight:500;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
 .srow .res{text-align:right;font-size:13px;color:var(--muted)}
 .srow .inp{padding:6px 8px;font-size:15px;font-family:var(--f-num);text-align:right}
@@ -396,8 +417,19 @@ function balancesOf(g, exps){
     b[e.payer] = (b[e.payer]||0) + e.amount;
     const s = sharesOf(e, g.members);
     for (const k in s) b[k] = (b[k]||0) - s[k];
+    // Quote ricevute: valgono come un pagamento da quel membro a chi ha pagato la spesa
+    for (const k in (e.got||{})){ const a = Math.round(Number(e.got[k] && e.got[k].a)) || 0; if (a>0 && k!==e.payer){ b[k] = (b[k]||0) + a; b[e.payer] -= a; } }
   }
   return b;
+}
+// Quote degli altri in una spesa e quanto ne è già stato ridato a chi ha pagato
+function receivedOf(e, members){
+  const sh = sharesOf(e, members), got = e.got || {}, order = members.map(m=>m.id);
+  const ids = [...new Set([...Object.keys(sh), ...Object.keys(got)])].filter(k=>k!==e.payer && (sh[k] || (got[k] && got[k].a>0)))
+    .sort((a,b)=>order.indexOf(a)-order.indexOf(b));
+  const rows = ids.map(k=>{ const share = sh[k]||0, a = got[k] ? Math.round(Number(got[k].a))||0 : 0;
+    return { id:k, share, a, at: got[k] ? got[k].at : null, left: Math.max(0, share-a), done: a>0 && a>=share }; });
+  return { rows, got: rows.reduce((s,r)=>s+r.a,0), left: rows.reduce((s,r)=>s+r.left,0), done: rows.filter(r=>r.done).length };
 }
 function settlePlan(b, members){
   const order = members.map(m=>m.id);
@@ -555,6 +587,14 @@ const store = {
     const { id, mine, ...body } = e;
     if (this.mode==="remote"){ await this.rpc("pari_save_expense", { p_group:gid, p_id:id, p_body:body, p_token:tokenOf(gid), p_author:deviceKey(), p_admin:adminOf(gid) }); await this.changed(); return; }
     (this.memE[gid] = this.memE[gid]||{})[id] = { id, ...body }; (this.eL[gid]||[]).forEach(f=>f());
+  },
+  // Quota ricevuta da un membro per una spesa: amt in centesimi, null per toglierla
+  async markReceived(gid, eid, mid, amt){
+    if (this.mode==="remote"){ await this.rpc("pari_mark_received", { p_group:gid, p_id:eid, p_member:mid, p_amount:amt, p_token:tokenOf(gid) }); await this.changed(); return; }
+    const e = (this.memE[gid]||{})[eid]; if (!e) return;
+    const got = {...(e.got||{})};
+    if (amt==null) delete got[mid]; else got[mid] = { a:amt, at:today() };
+    this.memE[gid][eid] = {...e, got}; (this.eL[gid]||[]).forEach(f=>f());
   },
   async deleteExpense(gid, eid){
     if (this.mode==="remote"){ await this.rpc("pari_delete_expense", { p_group:gid, p_id:eid, p_token:tokenOf(gid), p_author:deviceKey(), p_admin:adminOf(gid) }); await this.changed(); return; }
@@ -774,17 +814,24 @@ function renderLedger(g, exps, me){
     }
     const sh = sharesOf(e, g.members);
     const n = Object.keys(sh).length;
-    let mine = "";
+    let mine = "", progress = "";
+    const rc = receivedOf(e, g.members);
+    if (rc.got>0 && rc.rows.length) progress = `<span class="rprog"><i><b style="width:${Math.round(rc.done/rc.rows.length*100)}%"></b></i>${rc.done} su ${rc.rows.length} ${rc.done===1?"ricevuta":"ricevute"}</span>`;
     if (me){
-      const myS = sh[me]||0;
-      if (e.payer===me){ const lent = e.amount-myS; mine = lent>0 ? `<div class="m pos">hai anticipato ${money(lent)}</div>` : `<div class="m zero">solo tua</div>`; }
-      else if (myS) mine = `<div class="m neg">tua parte ${money(myS)}</div>`;
+      const myS = sh[me]||0, myGot = rc.rows.find(r=>r.id===me);
+      if (e.payer===me){
+        const lent = e.amount-myS;
+        mine = rc.got>0 ? (rc.left>0 ? `<div class="m pos">da ricevere ${money(rc.left)}</div>` : `<div class="m zero">tutto ricevuto</div>`)
+          : lent>0 ? `<div class="m pos">hai anticipato ${money(lent)}</div>` : `<div class="m zero">solo tua</div>`;
+      }
+      else if (myGot && myGot.done) mine = `<div class="m zero">tua parte ridata</div>`;
+      else if (myS) mine = `<div class="m neg">tua parte ${money(myGot ? myGot.left : myS)}</div>`;
       else mine = `<div class="m zero">non ti riguarda</div>`;
     }
     const c = catOf(e.cat);
     const modeL = e.mode==="equal" ? (n===g.members.length?"tutti":`${n} su ${g.members.length}`) : e.mode==="exact" ? "importi esatti" : e.mode==="percent" ? "a percentuale" : "a quote";
     html += `<button class="exp" data-act="editExp" data-id="${esc(e.id)}"><div class="day"><b>${day}</b><span>${mon}</span></div>
-      <div class="what"><div class="t">${esc(e.title)}</div><div class="s"><i class="dot" style="background:${c.c}"></i>${esc(memberName(g,e.payer))} ha pagato · ${modeL}${e.addedBy && e.addedBy!==e.payer ? ` · inserita da ${esc(memberName(g,e.addedBy))}` : ""}</div></div>
+      <div class="what"><div class="t">${esc(e.title)}</div><div class="s"><i class="dot" style="background:${c.c}"></i>${esc(memberName(g,e.payer))} ha pagato · ${modeL}${e.addedBy && e.addedBy!==e.payer ? ` · inserita da ${esc(memberName(g,e.addedBy))}` : ""}</div>${progress}</div>
       <div class="amt"><div class="a">${money(e.amount)}</div>${mine}</div></button>`;
   }
   return html + `</div>`;
@@ -878,6 +925,7 @@ function expenseSheet(g, existing, prefill){
 
   const html = `<div class="sh"><h2>${isSettle?"Pagamento":!editable?"Spesa":existing?"Modifica spesa":"Nuova spesa"}</h2><button class="btn ghost iconbtn" data-x aria-label="Chiudi">✕</button></div>
     ${isSettle ? `<p class="muted" style="margin:0">${esc(memberName(g,e.payer))} ha dato <span class="num">${money(e.amount)}</span> a ${esc(memberName(g,settleTo))} il ${esc(e.date)}.</p>` : `
+    ${existing ? `<div class="rcv" id="f-rcv"></div>` : ""}
     <div class="field"><label for="f-title">Descrizione</label><input class="inp" id="f-title" value="${esc(e.title)}" placeholder="Es. Cena in trattoria"></div>
     <div class="grid2"><div class="field"><label for="f-amount">Importo</label><input class="inp amount" id="f-amount" inputmode="decimal" value="${e.amount?centsToInput(e.amount):""}" placeholder="0,00"></div>
       <div class="field"><label for="f-payer">Ha pagato</label><select class="inp" id="f-payer">${g.members.map(m=>`<option value="${esc(m.id)}"${m.id===e.payer?" selected":""}>${esc(m.name)}</option>`).join("")}</select></div></div>
@@ -900,6 +948,8 @@ function expenseSheet(g, existing, prefill){
       catch(err){ handleWriteError(err, "Non è stato possibile eliminare. Riprova."); }
     };
     if (isSettle) return;
+    const rcvEl = $("#f-rcv",root);
+    if (rcvEl) drawReceived(g, e, rcvEl);
     const amtEl = $("#f-amount",root), split = $("#f-split",root), status = $("#f-status",root), save = root.querySelector("[data-save]");
     const curAmt = () => { const v = parseCents(amtEl.value); return isNaN(v)?0:v; };
     function compute(){
@@ -954,6 +1004,56 @@ function expenseSheet(g, existing, prefill){
       catch(err){ if (handleWriteError(err)) { closeSheet(); return; } save.disabled=false; status.className="status bad"; status.textContent = err && err.code==="quota_exceeded" ? "Spazio esaurito: elimina qualche spesa vecchia e riprova." : "Salvataggio non riuscito. Riprova."; }
     };
   });
+}
+
+// Scheda spesa: chi ha già ridato la sua parte. La segna solo chi ha pagato (o l'amministratore del gruppo).
+function drawReceived(g, e, el){
+  const me = getMe(g.id);
+  const canMark = store.canWrite && (me===e.payer || (g.hasAdmin && !!adminOf(g.id)));
+  const rc = receivedOf(e, g.members);
+  if (!rc.rows.length){ el.hidden = true; return; }
+  const day = at => at ? `${+at.slice(8,10)} ${MONTHS[+at.slice(5,7)-1]||""}` : "";
+  const nm = id => id===me ? "Tu" : esc(memberName(g,id));
+  const payerName = e.payer===me ? "te" : esc(memberName(g,e.payer));
+  const pct = Math.round(rc.got/Math.max(1, rc.got+rc.left)*100);
+  const rows = rc.rows.map(r=>{
+    const sub = r.done ? (r.at ? `<small class="pos">il ${day(r.at)}</small>` : "") : r.a>0 ? `<small>ricevuti ${money(r.a)}, mancano ${money(r.left)}</small>` : "";
+    const amt = `<span class="num${r.done?" off":""}">${money(r.done ? Math.max(r.a, r.share) : r.left)}</span>`;
+    const ctl = canMark
+      ? (r.done ? `<button type="button" class="btn small rbtn on" data-rcv="${esc(r.id)}" aria-pressed="true">✓ Ricevuta</button>`
+                : `<button type="button" class="btn small rbtn" data-rcv="${esc(r.id)}" aria-pressed="false">Segna</button>`)
+      : `<span class="rstat ${r.done?"pos":"neg"}">${r.done?"ricevuta":"da dare"}</span>`;
+    return `<div class="rrow">${avatar(g,r.id)}<span class="nm">${nm(r.id)}${sub}</span>${amt}${ctl}</div>`;
+  }).join("");
+  const missing = rc.rows.filter(r=>!r.done);
+  el.hidden = false;
+  el.innerHTML = `<div class="rhead"><b>${e.payer===me?"Chi ti ha ridato la sua parte":`Chi ha ridato la sua parte a ${payerName}`}</b><span class="muted">${rc.done} su ${rc.rows.length}</span></div>
+    <div class="rbar" aria-hidden="true"><b style="width:${pct}%"></b></div>
+    <div class="rsum num"><span class="pos">ricevuti ${money(rc.got)}</span><span class="${rc.left?"neg":"muted"}">${rc.left?`mancano ${money(rc.left)}`:"tutto ricevuto"}</span></div>
+    <div class="rlist">${rows}</div>
+    ${canMark && missing.length>1 ? `<button type="button" class="btn small" data-rcv-all>Segna tutte ricevute</button>` : ""}
+    ${canMark || e.payer===me ? "" : `<p class="muted rnote">Le quote le segna ${esc(memberName(g,e.payer))}, che ha pagato.${me && me!==e.payer && missing.some(r=>r.id===me) ? " Se gli hai già dato i soldi, diglielo." : ""}</p>`}`;
+  if (!canMark) return;
+  const setGot = (id, amt) => { e.got = {...(e.got||{})}; if (amt==null) delete e.got[id]; else e.got[id] = { a:amt, at:today() }; };
+  const redraw = () => { if (el.isConnected) drawReceived(g, e, el); };
+  async function mark(list){
+    const prev = list.map(r=>[r.id, e.got && e.got[r.id] ? e.got[r.id].a : null]);
+    list.forEach(r=>setGot(r.id, r.to)); redraw();
+    try {
+      for (const r of list) await store.markReceived(g.id, e.id, r.id, r.to);
+      const one = list.length===1 ? list[0] : null;
+      toast(one ? `${memberName(g,one.id)}: ${one.to==null?"quota di nuovo da ricevere":"quota ricevuta"}` : `${list.length} quote segnate come ricevute`, async ()=>{
+        prev.forEach(([id,a])=>setGot(id,a)); redraw();
+        try { for (const [id,a] of prev) await store.markReceived(g.id, e.id, id, a); } catch(err){ handleWriteError(err, "Non è stato possibile annullare. Riprova."); }
+      });
+    } catch(err){ prev.forEach(([id,a])=>setGot(id,a)); redraw(); handleWriteError(err, "Non è stato possibile salvare. Riprova."); }
+  }
+  el.querySelectorAll("[data-rcv]").forEach(b=>b.onclick=()=>{
+    const r = rc.rows.find(x=>x.id===b.dataset.rcv); if (!r) return;
+    mark([{ id:r.id, to: r.done ? null : r.share }]);
+  });
+  const all = el.querySelector("[data-rcv-all]");
+  if (all) all.onclick = ()=>mark(missing.filter(r=>r.share>0).map(r=>({ id:r.id, to:r.share })));
 }
 
 function groupSheet(existing){
