@@ -955,7 +955,7 @@ function expenseSheet(g, existing, prefill){
   };
   const isSettle = e.kind==="settle";
   const editable = !existing || canEditExp(g, existing);
-  const lockNote = editable ? "" : `<p class="status">${isSettle?"Questo pagamento lo può":"Questa spesa la può"} modificare o eliminare solo chi l'ha ${isSettle?"inserito":"inserita"}${e.addedBy && memberName(g,e.addedBy) ? `: ${esc(memberName(g,e.addedBy))}` : ""}.</p>`;
+  const lockNote = editable ? "" : `<p class="status">${isSettle?"Questo pagamento lo può":"Questa spesa la può"} modificare o eliminare solo chi l'ha ${isSettle?"inserito":"inserita"}${e.addedBy && memberName(g,e.addedBy) ? `: ${esc(memberName(g,e.addedBy))}` : ""}, oppure chi ha creato il gruppo. ${g.hasAdmin ? "Se l'hai creato tu, apri qui il tuo link da amministratore (lo trovi in Modifica sul dispositivo da cui l'hai creato)." : "Questo gruppo non ha ancora un amministratore: lo diventa chi imposta la password per primo, da Modifica."}</p>`;
   // working values per mode
   const W = { equal:{}, exact:{}, percent:{}, shares:{} };
   g.members.forEach(m=>{ W.equal[m.id]=1; W.exact[m.id]=""; W.percent[m.id]=""; W.shares[m.id]="1"; });
