@@ -190,6 +190,12 @@ textarea.inp{resize:vertical;font-size:14px;line-height:1.45}
 
 /* ledger */
 .ledger{background:var(--surface);border:1px solid var(--line);border-radius:var(--r);overflow:hidden}
+.swipe{position:relative;overflow:hidden;border-top:1px solid var(--line)}
+.swipe > .exp{border-top:0;position:relative;z-index:1;background:var(--surface);transition:transform .2s ease;touch-action:pan-y}
+.swipe > .exp:hover{background:var(--sunken)}
+.swipe.drag > .exp{transition:none}
+.sdel{position:absolute;top:0;right:0;bottom:0;width:88px;border:0;background:var(--neg);color:var(--surface);display:flex;flex-direction:column;align-items:center;justify-content:center;gap:4px;font-size:12px;font-weight:600}
+@media (prefers-reduced-motion: reduce){ .swipe > .exp{transition:none} }
 .month{padding:10px 18px;background:var(--sunken);display:flex;justify-content:space-between;align-items:baseline}
 .month .num{font-size:12.5px;color:var(--muted)}
 .exp{display:grid;grid-template-columns:44px minmax(0,1fr) auto;gap:12px;align-items:center;padding:12px 18px;border-top:1px solid var(--line);width:100%;background:transparent;border-left:0;border-right:0;border-bottom:0;text-align:left}
@@ -838,6 +844,12 @@ function quickPreview(g){
   return bits.map(b=>`<span>${b}</span>`).join("");
 }
 
+// Scorri una spesa verso sinistra per vedere Elimina (solo su quelle che puoi eliminare)
+function swipeWrap(g, e, row){
+  if (!store.canWrite || !canEditExp(g, e)) return row;
+  const what = e.kind==="settle" ? "pagamento" : `spesa ${e.title||""}`;
+  return `<div class="swipe" data-sid="${esc(e.id)}"><button class="sdel" data-act="swipeDel" data-id="${esc(e.id)}" tabindex="-1" aria-label="Elimina ${esc(what)}"><svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M4 7h16M10 11v6M14 11v6M6 7l1 13h10l1-13M9 7V4h6v3"/></svg>Elimina</button>${row}</div>`;
+}
 function renderLedger(g, exps, me){
   if (!exps.length) return `<div class="empty"><span class="eyebrow">Ancora nessuna spesa</span><p>Scrivi la prima nella barra qui sopra, per esempio "Spesa 36,40 ${esc(g.members[0]?g.members[0].name:"")}". Oppure usa Dettagli per dividere in modo diverso.</p></div>`;
   const sorted = [...exps].sort((a,b)=> (b.date||"").localeCompare(a.date||"") || (b.createdAt||0)-(a.createdAt||0));
@@ -850,9 +862,9 @@ function renderLedger(g, exps, me){
     const day = (e.date||"").slice(8,10), mon = MONTHS[+(e.date||"").slice(5,7)-1]||"";
     if (e.kind==="settle"){
       const to = Object.keys(e.parts||{})[0];
-      html += `<button class="exp settle" data-act="editExp" data-id="${esc(e.id)}"><div class="day"><b>${day}</b><span>${mon}</span></div>
+      html += swipeWrap(g, e, `<button class="exp settle" data-act="editExp" data-id="${esc(e.id)}"><div class="day"><b>${day}</b><span>${mon}</span></div>
         <div class="what"><div class="t">${esc(memberName(g,e.payer))} ha dato a ${esc(memberName(g,to))}</div><div class="s">Pagamento registrato</div></div>
-        <div class="amt"><div class="a">${money(e.amount)}</div></div></button>`;
+        <div class="amt"><div class="a">${money(e.amount)}</div></div></button>`);
       continue;
     }
     const sh = sharesOf(e, g.members);
@@ -873,9 +885,9 @@ function renderLedger(g, exps, me){
     }
     const c = catOf(e.cat);
     const modeL = e.mode==="equal" ? (n===g.members.length?"tutti":`${n} su ${g.members.length}`) : e.mode==="exact" ? "importi esatti" : e.mode==="percent" ? "a percentuale" : "a quote";
-    html += `<button class="exp" data-act="editExp" data-id="${esc(e.id)}"><div class="day"><b>${day}</b><span>${mon}</span></div>
+    html += swipeWrap(g, e, `<button class="exp" data-act="editExp" data-id="${esc(e.id)}"><div class="day"><b>${day}</b><span>${mon}</span></div>
       <div class="what"><div class="t">${esc(e.title)}</div><div class="s"><i class="dot" style="background:${c.c}"></i>${esc(memberName(g,e.payer))} ha pagato · ${modeL}${e.addedBy && e.addedBy!==e.payer ? ` · inserita da ${esc(memberName(g,e.addedBy))}` : ""}</div>${progress}</div>
-      <div class="amt"><div class="a">${money(e.amount)}</div>${mine}</div></button>`;
+      <div class="amt"><div class="a">${money(e.amount)}</div>${mine}</div></button>`);
   }
   return html + `</div>`;
 }
@@ -1434,6 +1446,46 @@ function passwordInvite(){
   });
 }
 
+/* ---------- swipe per eliminare ---------- */
+const SW = 88;
+function closeSwipes(except){ document.querySelectorAll(".swipe.open").forEach(w=>{ if (w!==except){ w.classList.remove("open"); w.querySelector(".exp").style.transform=""; w.querySelector(".sdel").tabIndex=-1; } }); }
+(function(){
+  let w = null, x0 = 0, y0 = 0, base = 0, dx = 0, mode = null, suppress = false;
+  document.addEventListener("pointerdown", ev=>{
+    const row = ev.target.closest(".swipe > .exp");
+    if (!row){ if (!ev.target.closest(".sdel")) closeSwipes(); return; }
+    w = row.parentElement; x0 = ev.clientX; y0 = ev.clientY; dx = 0; mode = null;
+    base = w.classList.contains("open") ? -SW : 0;
+    closeSwipes(w);
+  });
+  document.addEventListener("pointermove", ev=>{
+    if (!w) return;
+    const mx = ev.clientX - x0, my = ev.clientY - y0;
+    if (!mode){ if (Math.abs(mx) < 8 && Math.abs(my) < 8) return; mode = Math.abs(mx) > Math.abs(my) ? "x" : "y"; if (mode==="x") w.classList.add("drag"); }
+    if (mode!=="x") return;
+    dx = Math.max(-SW-24, Math.min(0, base + mx));
+    w.querySelector(".exp").style.transform = `translateX(${dx}px)`;
+  });
+  const end = ()=>{
+    if (!w) return;
+    if (mode==="x"){
+      const open = dx < -SW/2;
+      w.classList.remove("drag"); w.classList.toggle("open", open);
+      w.querySelector(".exp").style.transform = open ? `translateX(${-SW}px)` : "";
+      w.querySelector(".sdel").tabIndex = open ? 0 : -1;
+      suppress = true; setTimeout(()=>{ suppress = false; }, 50);
+    }
+    w = null; mode = null;
+  };
+  document.addEventListener("pointerup", end);
+  document.addEventListener("pointercancel", end);
+  // Dopo uno scorrimento il tocco non apre la spesa; su una riga aperta, il tocco la richiude
+  document.addEventListener("click", ev=>{
+    const row = ev.target.closest(".swipe > .exp"); if (!row) return;
+    if (suppress || row.parentElement.classList.contains("open")){ ev.stopImmediatePropagation(); ev.preventDefault(); if (!suppress) closeSwipes(); }
+  }, true);
+})();
+
 /* ---------- events ---------- */
 // Le password si vedono mentre le scrivi; "Nascondi" le maschera
 document.addEventListener("click", ev=>{
@@ -1462,6 +1514,12 @@ document.addEventListener("click", async ev=>{
   else if (act==="changeMe" && g){ S.changingMe=true; render(); }
   else if (act==="cancelMe" && g){ S.changingMe=false; render(); }
   else if (act==="invite" && g) inviteSheet(g);
+  else if (act==="swipeDel" && g){
+    const e = S.exps.find(x=>x.id===t.dataset.id); if (!e) return;
+    t.disabled = true;
+    try { await store.deleteExpense(g.id, e.id); toast(e.kind==="settle"?"Pagamento eliminato":`${e.title||"Spesa"} eliminata`, ()=>store.saveExpense(g.id, e)); }
+    catch(err){ t.disabled = false; closeSwipes(); handleWriteError(err, "Non è stato possibile eliminare. Riprova."); }
+  }
   else if (act==="payMe" && g){ const me = getMe(g.id); if (me) paySheet(g, me); }
   else if (act==="copyVal"){
     const v = t.dataset.v || "";
