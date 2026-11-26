@@ -43,10 +43,10 @@ ul{padding-left:20px}
 <a class="brand" href="./">pari<i>.</i></a>
 
 <h1>Privacy</h1>
-<p class="muted">Aggiornata il 20 ottobre 2026</p>
+<p class="muted">Aggiornata il 26 novembre 2026</p>
 
 <div class="card">
-<p style="margin:0">In breve: Pari non ha account, non usa cookie e non traccia nessuno. Salva solo quello che scrivi in un gruppo (nomi e spese), in un database in Irlanda. I gruppi compaiono nella home di Pari per tutti: quelli senza password li può aprire chiunque, di quelli con password si vede solo il nome. Quando elimini il gruppo sparisce tutto.</p>
+<p style="margin:0">In breve: Pari non ha account, non usa cookie e non traccia nessuno. Salva solo quello che scrivi in un gruppo (nomi, spese e, se vuoi, come preferisci essere pagato), in un database in Irlanda. I gruppi compaiono nella home di Pari per tutti: quelli senza password li può aprire chiunque, di quelli con password si vede solo il nome. I metodi di pagamento li vede chiunque entri nel gruppo. Quando elimini il gruppo sparisce tutto.</p>
 </div>
 
 <h2>Chi gestisce Pari</h2>
@@ -55,24 +55,27 @@ ul{padding-left:20px}
 <h2>Quali dati vengono salvati</h2>
 <ul>
   <li><b>Il gruppo</b>: il nome del gruppo e i nomi dei partecipanti, così come li scrivete. Bastano nomi o soprannomi.</li>
-  <li><b>Le spese</b>: descrizione, importo, data, chi ha pagato e come è divisa.</li>
+  <li><b>Le spese</b>: descrizione, importo, data, chi ha pagato, come è divisa e quali quote chi ha pagato ha segnato come già ridate.</li>
+  <li><b>I metodi di pagamento</b>, solo se li aggiungi tu, per te: il link Satispay o il numero di telefono, il link PayPal.me o l'email PayPal, l'IBAN e l'intestatario del conto. Servono agli altri del gruppo per pagarti.</li>
   <li><b>La password del gruppo</b>, se chi l'ha creato ne ha impostata una: è salvata solo in forma cifrata (bcrypt), nessuno può leggerla.</li>
 </ul>
-<p>Non vengono chiesti email, numero di telefono né altri dati. Se crei un gruppo e inserisci i nomi di altre persone, avvisale e usa solo quello che serve a riconoscersi.</p>
+<p>Oltre ai metodi di pagamento facoltativi, non vengono chiesti email, numero di telefono né altri dati. Se crei un gruppo e inserisci i nomi di altre persone, avvisale e usa solo quello che serve a riconoscersi.</p>
 
 <h2>Dove sono i dati e chi li vede</h2>
 <ul>
   <li>I dati dei gruppi sono nel database di <b>Supabase</b>, su server in Irlanda (Unione Europea). Supabase agisce come fornitore per conto di Pari.</li>
   <li><b>I gruppi sono visibili a tutti nella home di Pari.</b> In un gruppo senza password chiunque può entrare, leggere e aggiungere spese. In un gruppo con password, chi non la conosce vede solo il nome del gruppo. Se non vuoi che altri vedano nomi e spese, metti una password.</li>
+  <li><b>I metodi di pagamento li vede chiunque entri nel gruppo</b>, compreso, nei gruppi senza password, chi lo apre dalla home. Pari lo ricorda quando li inserisci. Non compaiono nell'elenco dei gruppi della home. Li può cambiare solo il dispositivo da cui li hai inseriti, o chi ha il link da amministratore del gruppo, così nessun altro può sostituire il tuo IBAN con il suo.</li>
+  <li><b>Pari non gestisce pagamenti.</b> I tasti "Apri" portano a Satispay o PayPal, e il pagamento avviene lì o con la tua banca, secondo le loro regole sulla privacy. Pari non sa se un pagamento è stato fatto: lo sa solo se qualcuno lo segna nel gruppo.</li>
   <li>La pagina è ospitata su <b>GitHub Pages</b> (GitHub, Inc., USA). Come ogni sito, GitHub e Supabase registrano nei loro log tecnici l'indirizzo IP e i dati di base del browser di chi visita, per far funzionare e proteggere il servizio. Il trasferimento verso gli USA avviene con le garanzie previste dal GDPR (Data Privacy Framework UE-USA e clausole contrattuali standard).</li>
   <li>Font e codice della pagina sono serviti dal sito stesso: nessuna richiesta a Google o ad altri servizi esterni.</li>
 </ul>
 
 <h2>Sul tuo dispositivo</h2>
-<p>Pari non usa cookie, né strumenti di analisi o pubblicità. Salva nella memoria locale del browser (<code>localStorage</code>) solo ciò che serve a farti rientrare: l'elenco dei gruppi che hai aperto, quale persona sei in ciascun gruppo e, per i gruppi con password, un codice di accesso (non la password) e, se hai creato tu il gruppo, la chiave per gestirlo. Restano sul dispositivo e non vengono inviate a nessuno. Le cancelli rimuovendo il gruppo dall'elenco o cancellando i dati del sito dal browser.</p>
+<p>Pari non usa cookie, né strumenti di analisi o pubblicità. Salva nella memoria locale del browser (<code>localStorage</code>) solo ciò che serve a farti rientrare: l'elenco dei gruppi che hai aperto, quale persona sei in ciascun gruppo e, per i gruppi con password, un codice di accesso (non la password) e, se hai creato tu il gruppo, la chiave per gestirlo. Salva anche una chiave casuale del dispositivo: viene inviata con le spese e i metodi di pagamento che inserisci, e sul server ne resta solo una versione cifrata, che serve a riconoscere chi può modificarli. Il resto rimane sul dispositivo e non viene inviato a nessuno. Le cancelli rimuovendo il gruppo dall'elenco o cancellando i dati del sito dal browser.</p>
 
 <h2>Perché e per quanto tempo</h2>
-<p>I dati servono solo a far funzionare il servizio che usi: tenere i conti del gruppo (art. 6.1.b del GDPR). I log tecnici servono a sicurezza e funzionamento (art. 6.1.f). I dati di un gruppo restano finché il gruppo esiste: eliminando una spesa o l'intero gruppo dall'app, i dati vengono cancellati subito e non si possono recuperare. I log vengono conservati per il tempo deciso da GitHub e Supabase.</p>
+<p>I dati servono solo a far funzionare il servizio che usi: tenere i conti del gruppo (art. 6.1.b del GDPR). I log tecnici servono a sicurezza e funzionamento (art. 6.1.f). I dati di un gruppo restano finché il gruppo esiste: eliminando una spesa o l'intero gruppo dall'app, o togliendo i tuoi metodi di pagamento, i dati vengono cancellati subito e non si possono recuperare. I log vengono conservati per il tempo deciso da GitHub e Supabase.</p>
 
 <h2>I tuoi diritti</h2>
 <p>Puoi chiedere di accedere ai dati che ti riguardano, correggerli, cancellarli, limitarne l'uso o opporti, scrivendo a <a href="mailto:docdandi@gmail.com">docdandi@gmail.com</a>. Indica il link del gruppo, altrimenti non è possibile trovarlo. Hai anche il diritto di presentare reclamo al <a href="https://www.garanteprivacy.it" rel="noopener">Garante per la protezione dei dati personali</a>.</p>

@@ -45,6 +45,8 @@
     "Nessun limite di spese giornaliere",
     "Divisione in parti uguali, per importi, percentuali o quote",
     "Calcolo dei saldi e del numero minimo di pagamenti",
+    "Quote ricevute segnate spesa per spesa",
+    "Metodi di pagamento preferiti: Satispay, PayPal e bonifico",
     "Aggiornamenti in tempo reale",
     "Nessun cookie né tracciamento"
   ],
@@ -234,6 +236,35 @@ textarea.inp{resize:vertical;font-size:14px;line-height:1.45}
 .tx .arrow{color:var(--muted);font-family:var(--f-num)}
 .tx .num{font-weight:500;font-size:15px}
 .tx .act{grid-column:1 / -1;display:flex;justify-content:flex-end}
+.tx .paynames{grid-column:1 / -1;font-size:12.5px;color:var(--muted)}
+.paybox{grid-column:1 / -1;display:flex;flex-direction:column;gap:8px;margin-top:4px}
+.paybox .lead{font-size:13px;color:var(--muted)}
+.pms{display:flex;flex-direction:column;border:1px solid var(--line);border-radius:12px;overflow:hidden;background:var(--bg)}
+.pm{display:grid;grid-template-columns:auto minmax(0,1fr) auto;gap:10px;align-items:center;padding:8px 8px 8px 12px;min-height:56px}
+.pm + .pm{border-top:1px solid var(--line)}
+.pm .ic{width:32px;height:32px;border-radius:9px;display:grid;place-items:center;font-weight:700;font-size:13px}
+.ic.sat{background:var(--neg-soft);color:var(--neg)} .ic.pp{background:var(--accent-soft);color:var(--accent)} .ic.bon{background:var(--pos-soft);color:var(--pos)}
+.paysheet .ic{width:36px;height:36px;border-radius:10px;display:grid;place-items:center;font-weight:700;flex:none}
+.pm .tt{display:flex;flex-direction:column;min-width:0;font-weight:600;font-size:14px}
+.pm .tt small{font-weight:400;font-size:12px;color:var(--muted);overflow-wrap:anywhere}
+.pm .tt small.mono{font-family:var(--f-num)}
+.pm .btn{min-height:44px;text-decoration:none}
+.paysheet .pmeth{border:1px solid var(--line);border-radius:14px;background:var(--bg);overflow:hidden}
+.paysheet .pmeth > label.top{display:flex;align-items:center;gap:12px;padding:12px 14px;min-height:60px;cursor:pointer}
+.paysheet .pmeth > label.top input{width:22px;height:22px;accent-color:var(--pos);margin-left:auto;flex:none}
+.paysheet .pmeth .tt{display:flex;flex-direction:column;font-weight:600}
+.paysheet .pmeth .tt small{font-weight:400;font-size:12.5px;color:var(--muted)}
+.paysheet .pbody{padding:0 14px 14px;display:flex;flex-direction:column;gap:10px}
+.paysheet .pbody[hidden]{display:none}
+.paysheet .lrow{display:flex;align-items:center;justify-content:space-between;gap:8px}
+.paysheet .lrow label{font-size:13px;color:var(--muted)}
+.paysheet .ibtn{width:44px;height:44px;margin:-10px -10px -10px 0;border:0;background:none;color:var(--accent);display:grid;place-items:center}
+.paysheet .hint{font-size:12px;color:var(--muted)} .paysheet .hint.ok{color:var(--pos)} .paysheet .hint.bad{color:var(--neg)}
+.paysheet .alt{border:0;background:none;padding:0;color:var(--accent);font-size:13px;font-weight:600;text-align:left;min-height:32px}
+.pinfo{position:fixed;inset:0;z-index:60;background:rgba(5,8,7,.6);display:grid;place-items:center;padding:20px}
+.pinfo .box{background:var(--surface);border:1px solid var(--line);border-radius:18px;padding:20px;max-width:420px;width:100%;display:flex;flex-direction:column;gap:12px}
+.pinfo ol{margin:0;padding-left:20px;display:flex;flex-direction:column;gap:8px;line-height:1.45}
+.pinfo .note{font-size:13px;color:var(--muted);background:var(--bg);border-radius:10px;padding:10px 12px;margin:0}
 .receipt .foot{display:flex;justify-content:space-between;gap:10px;flex-wrap:wrap;border-top:1px dashed var(--line);padding-top:10px;align-items:center}
 .square{font-family:var(--f-num);color:var(--pos);font-size:14px}
 
@@ -588,6 +619,17 @@ const store = {
     if (this.mode==="remote"){ await this.rpc("pari_save_expense", { p_group:gid, p_id:id, p_body:body, p_token:tokenOf(gid), p_author:deviceKey(), p_admin:adminOf(gid) }); await this.changed(); return; }
     (this.memE[gid] = this.memE[gid]||{})[id] = { id, ...body }; (this.eL[gid]||[]).forEach(f=>f());
   },
+  // Metodi di pagamento di un membro (oggetto) o null per toglierli
+  async setPay(gid, mid, pay){
+    if (this.mode==="remote"){
+      await this.rpc("pari_set_pay", { p_group:gid, p_member:mid, p_pay:pay, p_token:tokenOf(gid), p_author:deviceKey(), p_admin:adminOf(gid) });
+      await this.changed(); return;
+    }
+    const g = this.memG[gid]; if (!g) return;
+    const all = {...(g.pay||{})};
+    if (pay) all[mid] = {...pay, at:today()}; else delete all[mid];
+    this.memG[gid] = {...g, pay:all}; this.notifyGroups();
+  },
   // Quota ricevuta da un membro per una spesa: amt in centesimi, null per toglierla
   async markReceived(gid, eid, mid, amt){
     if (this.mode==="remote"){ await this.rpc("pari_mark_received", { p_group:gid, p_id:eid, p_member:mid, p_amount:amt, p_token:tokenOf(gid) }); await this.changed(); return; }
@@ -668,6 +710,7 @@ function handleWriteError(err, fallback){
   if (/locked/.test(m)){ toast("La password del gruppo è cambiata: inseriscila di nuovo."); lsSet("pari.tok."+S.gid, null); closeSheet(); if (S.gid) openGroup(S.gid); return true; }
   if (/not_admin/.test(m)){ toast("Solo chi ha creato il gruppo può farlo."); return true; }
   if (/not_author/.test(m)){ toast("Solo chi ha inserito la spesa può modificarla o eliminarla."); return true; }
+  if (/invalid_pay/.test(m)){ toast("Controlla i dati di pagamento: qualcosa non torna."); return true; }
   if (fallback) toast(navigator.onLine===false ? "Sei offline: riprova quando torna la connessione." : fallback);
   return false;
 }
@@ -757,7 +800,7 @@ function renderGroup(g){
     const v = bal[me]||0;
     const lbl = v>0 ? "Ti devono" : v<0 ? "Devi dare" : "Sei in pari";
     meCard = `<div class="me"><div><div class="eyebrow">${avatar(g,me,"mini")} ${esc(memberName(g,me))} · ${lbl}</div><div class="big ${v>0?"pos":v<0?"neg":""}">${v?money(Math.abs(v)):"0,00 €"}</div></div>
-      <div class="hint">${nextPayer ? (nextPayer[0]===me ? `La prossima spesa <b>tocca a te</b>` : `La prossima spesa tocca a <b>${esc(memberName(g,nextPayer[0]))}</b>`) : "Nessuno è in debito"}<br><button class="linkbtn" data-act="changeMe">Non sei ${esc(memberName(g,me))}? Cambia</button></div></div>`;
+      <div class="hint">${nextPayer ? (nextPayer[0]===me ? `La prossima spesa <b>tocca a te</b>` : `La prossima spesa tocca a <b>${esc(memberName(g,nextPayer[0]))}</b>`) : "Nessuno è in debito"}<br><button class="linkbtn" data-act="changeMe">Non sei ${esc(memberName(g,me))}? Cambia</button>${store.canWrite?`<br><button class="linkbtn" data-act="payMe">${payOf(g,me)?"I tuoi metodi di pagamento":"Come vuoi essere pagato?"}</button>`:""}</div></div>`;
   }
 
   const quick = store.canWrite && me ? `<form class="quick" id="quickForm" autocomplete="off">
@@ -838,6 +881,7 @@ function renderLedger(g, exps, me){
 }
 
 function renderBalances(g, bal, plan){
+  const me = S.changingMe ? null : getMe(g.id);
   const max = Math.max(1, ...Object.values(bal).map(Math.abs));
   const rows = g.members.map(m=>{
     const v = bal[m.id]||0, w = Math.round(Math.abs(v)/max*100);
@@ -848,7 +892,8 @@ function renderBalances(g, bal, plan){
   }).join("");
   const naive = g.members.filter(m=>(bal[m.id]||0)<0).length * g.members.filter(m=>(bal[m.id]||0)>0).length;
   const receipt = plan.length ? `<div class="receipt"><div class="head"><h2>Per chiudere i conti</h2><span class="num">${plan.length} ${plan.length===1?"pagamento":"pagamenti"}</span></div>
-      ${plan.map((t,i)=>`<div class="tx"><div class="who2">${avatar(g,t.from)}${esc(memberName(g,t.from))}<span class="arrow">→</span>${avatar(g,t.to)}${esc(memberName(g,t.to))}</div><span class="num">${money(t.amt)}</span>
+      ${plan.map((t,i)=>`<div class="tx${t.from===me?" mine":""}"><div class="who2">${avatar(g,t.from)}${t.from===me?"<b>Tu</b>":esc(memberName(g,t.from))}<span class="arrow">→</span>${avatar(g,t.to)}${t.to===me?"<b>Tu</b>":esc(memberName(g,t.to))}</div><span class="num">${money(t.amt)}</span>
+        ${payBlock(g, t, me)}
         ${store.canWrite?`<div class="act"><button class="btn small" data-act="settle" data-i="${i}">Segna come pagato</button></div>`:""}</div>`).join("")}
       <div class="foot"><span class="muted" style="font-size:12.5px">${naive>plan.length?`Semplificato: ${plan.length} invece di ${naive}`:"Il percorso più corto"}</span><button class="btn ghost small" data-act="copy">Copia riepilogo</button></div></div>`
     : `<div class="receipt"><div class="head"><h2>Per chiudere i conti</h2></div><div class="square">Siete in pari. Nessun pagamento da fare.</div></div>`;
@@ -1054,6 +1099,136 @@ function drawReceived(g, e, el){
   });
   const all = el.querySelector("[data-rcv-all]");
   if (all) all.onclick = ()=>mark(missing.filter(r=>r.share>0).map(r=>({ id:r.id, to:r.share })));
+}
+
+/* ---------- metodi di pagamento ---------- */
+const payOf = (g, mid) => { const p = g && g.pay && g.pay[mid]; return p && (p.sat || p.satTel || p.pp || p.ppEmail || p.iban) ? p : null; };
+// I metodi di un membro li cambia il dispositivo che li ha scritti, o l'amministratore
+const canEditPay = (g, p) => !p || !p.by || (g.hasAdmin && !!adminOf(g.id)) || authorHashes[g.id]===p.by;
+function ibanValid(raw){
+  const s = String(raw||"").replace(/\s/g,"").toUpperCase();
+  if (!/^[A-Z]{2}[0-9]{2}[A-Z0-9]{11,30}$/.test(s)) return false;
+  if (s.startsWith("IT") && s.length!==27) return false;
+  const r = (s.slice(4)+s.slice(0,4)).replace(/[A-Z]/g, c=>String(c.charCodeAt(0)-55));
+  let m = 0; for (const ch of r) m = (m*10 + +ch) % 97;
+  return m===1;
+}
+const ibanFmt = s => String(s||"").replace(/\s/g,"").replace(/(.{4})/g,"$1 ").trim();
+const satLinkOf = v => { const m = String(v||"").match(/https:\/\/([A-Za-z0-9-]+\.)*satispay\.com\/[^\s"<>]*/i); return m ? m[0] : ""; };
+const ppNameOf = v => { const t = String(v||"").trim().replace(/^@/,""); const m = t.match(/(?:paypal\.me\/|paypal\.com\/paypalme\/)([A-Za-z0-9]{1,20})/i); return m ? m[1] : (/^[A-Za-z0-9]{1,20}$/.test(t) ? t : ""); };
+const payNames = p => [p.sat||p.satTel?"Satispay":"", p.pp||p.ppEmail?"PayPal":"", p.iban?"Bonifico":""].filter(Boolean).join(" · ");
+
+// Nei Saldi: come pagare chi riceve. Aperto per i pagamenti che tocca fare a te, solo i nomi per gli altri.
+function payBlock(g, t, me){
+  const p = payOf(g, t.to), to = esc(memberName(g, t.to));
+  if (t.from!==me) return p ? `<div class="paynames">${t.to===me?"Ti pagano con":to+" accetta"}: ${payNames(p)}</div>` : "";
+  if (!p) return `<div class="paynames">${to} non ha ancora aggiunto i metodi di pagamento.</div>`;
+  const amt = plain(t.amt), rows = [];
+  if (p.sat) rows.push(`<div class="pm"><span class="ic sat">S</span><span class="tt">Satispay<small>nell'app scrivi ${amt} €</small></span><a class="btn small primary" href="${esc(p.sat)}" target="_blank" rel="noopener noreferrer">Apri</a></div>`);
+  else if (p.satTel) rows.push(`<div class="pm"><span class="ic sat">S</span><span class="tt">Satispay<small class="mono">${esc(p.satTel)}</small></span><button class="btn small" data-act="copyVal" data-v="${esc(p.satTel)}" data-l="Numero">Copia</button></div>`);
+  if (p.pp) rows.push(`<div class="pm"><span class="ic pp">P</span><span class="tt">PayPal<small>importo già scritto</small></span><a class="btn small primary" href="https://paypal.me/${encodeURIComponent(p.pp)}/${(t.amt/100).toFixed(2)}" target="_blank" rel="noopener noreferrer">Apri</a></div>`);
+  else if (p.ppEmail) rows.push(`<div class="pm"><span class="ic pp">P</span><span class="tt">PayPal<small>${esc(p.ppEmail)}</small></span><button class="btn small" data-act="copyVal" data-v="${esc(p.ppEmail)}" data-l="Email">Copia</button></div>`);
+  if (p.iban) rows.push(`<div class="pm"><span class="ic bon">€</span><span class="tt">Bonifico a ${esc(p.holder||memberName(g,t.to))}<small class="mono">${esc(ibanFmt(p.iban))}</small></span><button class="btn small" data-act="copyVal" data-v="${esc(p.iban)}" data-l="IBAN">Copia</button></div>`);
+  return `<div class="paybox"><div class="lrow" style="display:flex;justify-content:space-between;align-items:center;gap:8px"><span class="lead">Come pagare ${to}:</span><button class="btn ghost small" data-act="copyVal" data-v="${amt}" data-l="Importo">Copia ${amt} €</button></div><div class="pms">${rows.join("")}</div></div>`;
+}
+
+const PAY_INFO = {
+  sat: { t:"Dove trovo il link Satispay",
+    steps:["Apri Satispay sulla schermata Home.","Tocca la tua foto in alto a sinistra, poi il tuo nome utente.","Tocca Condividi e copia il link, oppure mandalo a te stesso in chat.","Torna qui e incollalo: va bene anche tutto il messaggio, Pari prende solo il link."],
+    note:"Chi ti paga apre Satispay direttamente su di te. L'importo lo scrive a mano: Pari gli mostra quanto." },
+  pp: { t:"Dove trovo il link PayPal.me",
+    steps:["Apri l'app PayPal o paypal.com ed entra nel tuo conto.","Vai su Impostazioni, poi Profilo: lì trovi il tuo link paypal.me/…","Copialo e incollalo qui. Basta anche solo il nome dopo paypal.me/."],
+    note:"Se non hai ancora un link, lo crei gratis su paypal.me. Scegli bene il nome: dopo non si può cambiare." }
+};
+function payInfo(k){
+  const i = PAY_INFO[k], el = document.createElement("div");
+  el.className = "pinfo";
+  el.innerHTML = `<div class="box" role="dialog" aria-modal="true" aria-label="${esc(i.t)}"><h3 style="margin:0;font-size:18px">${esc(i.t)}</h3>
+    <ol>${i.steps.map(x=>`<li>${esc(x)}</li>`).join("")}</ol><p class="note">${esc(i.note)}</p>
+    <button class="btn primary" type="button" data-close>Ho capito</button></div>`;
+  const close = ()=>{ el.remove(); document.removeEventListener("keydown", onKey, true); };
+  const onKey = e=>{ if (e.key==="Escape"){ e.stopPropagation(); close(); } };
+  el.addEventListener("mousedown", e=>{ if (e.target===el) close(); });
+  el.querySelector("[data-close]").onclick = close;
+  document.addEventListener("keydown", onKey, true);
+  document.body.appendChild(el); el.querySelector("[data-close]").focus();
+}
+
+function paySheet(g, mid){
+  const p = payOf(g, mid) || {};
+  const editable = canEditPay(g, payOf(g, mid));
+  const on = { sat: !!(p.sat||p.satTel), pp: !!(p.pp||p.ppEmail), bon: !!p.iban };
+  let satTel = !p.sat && !!p.satTel, ppMail = !p.pp && !!p.ppEmail;
+  const ibtn = k => `<button type="button" class="ibtn" data-info="${k}" aria-label="Come trovo il link?"><svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><circle cx="12" cy="12" r="9"/><path d="M12 8h.01M11 12h1v5h1"/></svg></button>`;
+  const meth = (k, ic, title, sub, body) => `<div class="pmeth"><label class="top"><span class="ic ${k}">${ic}</span><span class="tt">${title}<small>${sub}</small></span><input type="checkbox" data-on="${k}" ${on[k]?"checked":""}></label><div class="pbody" data-body="${k}" ${on[k]?"":"hidden"}>${body}</div></div>`;
+  const html = `<div class="sh"><h2>Come vuoi essere pagato?</h2><button class="btn ghost iconbtn" data-x aria-label="Chiudi">✕</button></div>
+    <p class="muted" style="margin:0;font-size:14px">Chi ti deve dei soldi li vede in Saldi, con i tasti per pagarti.</p>
+    <div class="paysheet" style="display:flex;flex-direction:column;gap:10px">
+    ${meth("sat","S","Satispay","si apre già sulla tua pagina", `
+      <div data-sat-link ${satTel?"hidden":""} style="display:flex;flex-direction:column;gap:6px"><div class="lrow"><label for="p-sat">Il tuo link Satispay</label>${ibtn("sat")}</div>
+        <input class="inp" id="p-sat" inputmode="url" autocapitalize="off" spellcheck="false" placeholder="Incolla il link dall'app" value="${esc(p.sat||"")}"><span class="hint" data-h="sat"></span>
+        <button type="button" class="alt" data-alt="sat">Non lo trovi? Usa il numero di telefono</button></div>
+      <div data-sat-tel ${satTel?"":"hidden"} style="display:flex;flex-direction:column;gap:6px"><label for="p-tel" style="font-size:13px;color:var(--muted)">Numero di telefono</label>
+        <input class="inp" id="p-tel" type="tel" inputmode="tel" placeholder="+39 333 123 4567" value="${esc(p.satTel||"")}"><span class="hint" data-h="tel"></span>
+        <button type="button" class="alt" data-alt="satlink">Usa il link (si apre Satispay direttamente)</button></div>`)}
+    ${meth("pp","P","PayPal","si apre con l'importo già scritto", `
+      <div data-pp-link ${ppMail?"hidden":""} style="display:flex;flex-direction:column;gap:6px"><div class="lrow"><label for="p-pp">Il tuo link PayPal.me</label>${ibtn("pp")}</div>
+        <input class="inp" id="p-pp" autocapitalize="off" spellcheck="false" placeholder="paypal.me/nome" value="${p.pp?"paypal.me/"+esc(p.pp):""}"><span class="hint" data-h="pp"></span>
+        <button type="button" class="alt" data-alt="pp">Non ce l'hai? Usa l'email PayPal</button></div>
+      <div data-pp-mail ${ppMail?"":"hidden"} style="display:flex;flex-direction:column;gap:6px"><label for="p-mail" style="font-size:13px;color:var(--muted)">Email PayPal</label>
+        <input class="inp" id="p-mail" type="email" autocapitalize="off" placeholder="nome@esempio.it" value="${esc(p.ppEmail||"")}"><span class="hint" data-h="mail"></span>
+        <button type="button" class="alt" data-alt="pplink">Usa il link PayPal.me (si apre con l'importo)</button></div>`)}
+    ${meth("bon","€","Bonifico","con IBAN e intestatario", `
+      <div style="display:flex;flex-direction:column;gap:6px"><label for="p-iban" style="font-size:13px;color:var(--muted)">IBAN</label>
+        <input class="inp" id="p-iban" autocapitalize="characters" spellcheck="false" placeholder="IT00 X000 0000 0000 0000 0000 000" value="${esc(ibanFmt(p.iban))}" style="font-family:var(--f-num)"><span class="hint" data-h="iban"></span></div>
+      <div style="display:flex;flex-direction:column;gap:6px"><label for="p-holder" style="font-size:13px;color:var(--muted)">Intestatario</label>
+        <input class="inp" id="p-holder" maxlength="70" value="${esc(p.holder||memberName(g,mid))}"><span class="hint" data-h="holder"></span></div>`)}
+    </div>
+    <p class="status" style="margin:0">Li vede chiunque entri nel gruppo.${g.private ? "" : " Questo gruppo non ha password: chi lo apre dalla home di Pari li vede."}</p>
+    ${editable ? "" : `<p class="status bad" style="margin:0">Li ha scritti un altro dispositivo: si cambiano solo da lì, o con il link da amministratore del gruppo.</p>`}
+    <div class="actions"><span></span><div class="row"><button class="btn" data-x>Annulla</button>${editable?`<button class="btn primary" data-save>Salva</button>`:""}</div></div>`;
+
+  openSheet(html, root=>{
+    root.querySelectorAll("[data-x]").forEach(b=>b.onclick=closeSheet);
+    root.querySelectorAll("[data-info]").forEach(b=>b.onclick=()=>payInfo(b.dataset.info));
+    root.querySelectorAll("[data-on]").forEach(c=>c.onchange=()=>{ on[c.dataset.on]=c.checked; root.querySelector(`[data-body="${c.dataset.on}"]`).hidden=!c.checked; });
+    const sw = (a,b,flag) => { root.querySelector(a).hidden = flag; root.querySelector(b).hidden = !flag; };
+    root.querySelectorAll("[data-alt]").forEach(b=>b.onclick=()=>{
+      const k = b.dataset.alt;
+      if (k==="sat"||k==="satlink"){ satTel = k==="sat"; sw("[data-sat-link]","[data-sat-tel]",satTel); }
+      else { ppMail = k==="pp"; sw("[data-pp-link]","[data-pp-mail]",ppMail); }
+    });
+    const ibanIn = $("#p-iban",root), ibanH = root.querySelector('[data-h="iban"]');
+    ibanIn.addEventListener("input", ()=>{ const v=ibanIn.value.trim(); if (!v){ ibanH.textContent=""; ibanH.className="hint"; return; }
+      const ok = ibanValid(v); ibanH.textContent = ok ? "IBAN valido" : "IBAN non valido: controlla le cifre"; ibanH.className = "hint "+(ok?"ok":"bad"); });
+    ibanIn.addEventListener("blur", ()=>{ if (ibanIn.value.trim()) ibanIn.value = ibanFmt(ibanIn.value.toUpperCase()); });
+    if (ibanIn.value) ibanIn.dispatchEvent(new Event("input"));
+    if (!editable){ root.querySelectorAll(".paysheet input, .paysheet button.alt").forEach(x=>x.disabled=true); return; }
+    const save = root.querySelector("[data-save]");
+    save.onclick = async ()=>{
+      const out = {}, bad = [];
+      const hint = (k,msg)=>{ const h=root.querySelector(`[data-h="${k}"]`); h.textContent=msg; h.className="hint bad"; bad.push(k); };
+      root.querySelectorAll(".paysheet .hint:not([data-h=iban])").forEach(h=>{ h.textContent=""; h.className="hint"; });
+      if (on.sat){
+        if (satTel){ const v=$("#p-tel",root).value.replace(/[\s.-]/g,""); if (/^\+?[0-9]{6,15}$/.test(v)) out.satTel=v; else hint("tel","Scrivi il numero, per esempio +39 333 123 4567."); }
+        else { const v=satLinkOf($("#p-sat",root).value); if (v) out.sat=v; else hint("sat","Non trovo un link Satispay: copialo di nuovo dall'app (tocca la i per sapere dove)."); }
+      }
+      if (on.pp){
+        if (ppMail){ const v=$("#p-mail",root).value.trim(); if (/^[^\s@<>"]+@[^\s@<>"]+\.[^\s@<>"]+$/.test(v)) out.ppEmail=v; else hint("mail","Email non valida."); }
+        else { const v=ppNameOf($("#p-pp",root).value); if (v) out.pp=v; else hint("pp","Incolla il link paypal.me/… o solo il nome."); }
+      }
+      if (on.bon){
+        const v=$("#p-iban",root).value.replace(/\s/g,"").toUpperCase(), h=$("#p-holder",root).value.trim();
+        if (!ibanValid(v)){ ibanH.textContent = v ? "IBAN non valido: controlla le cifre" : "Scrivi l'IBAN."; ibanH.className="hint bad"; bad.push("iban"); }
+        else out.iban=v;
+        if (!h) hint("holder","Scrivi a chi è intestato il conto."); else out.holder=h;
+      }
+      if (bad.length){ const f = root.querySelector(`#p-${bad[0]==="mail"?"mail":bad[0]}`); if (f) f.focus(); return; }
+      save.disabled = true;
+      try { await store.setPay(g.id, mid, Object.keys(out).length ? out : null); closeSheet(); toast(Object.keys(out).length ? "Metodi di pagamento salvati" : "Metodi di pagamento tolti"); render(); }
+      catch(err){ save.disabled=false; if (handleWriteError(err, "Salvataggio non riuscito. Riprova.")) return; }
+    };
+  });
 }
 
 function groupSheet(existing){
@@ -1287,6 +1462,12 @@ document.addEventListener("click", async ev=>{
   else if (act==="changeMe" && g){ S.changingMe=true; render(); }
   else if (act==="cancelMe" && g){ S.changingMe=false; render(); }
   else if (act==="invite" && g) inviteSheet(g);
+  else if (act==="payMe" && g){ const me = getMe(g.id); if (me) paySheet(g, me); }
+  else if (act==="copyVal"){
+    const v = t.dataset.v || "";
+    try { await navigator.clipboard.writeText(v); toast(`${t.dataset.l || "Testo"} copiato`); }
+    catch(err){ toast(`Non riesco a copiare: ${v}`); }
+  }
   else if (act==="newExp" && g){ const p = S.quick.trim() ? parseQuick(S.quick, g, getMe(g.id)) : null; expenseSheet(g, null, p); }
   else if (act==="editExp" && g){ const e = S.exps.find(x=>x.id===t.dataset.id); if (e) expenseSheet(g, e); }
   else if (act==="settle" && g){
